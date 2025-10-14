@@ -97,7 +97,7 @@ func SearchHandler(pool *pgxpool.Pool) echo.HandlerFunc {
 				MaxSearchResults:       10,
 			}
 			// Background processing via module helper
-			go modules.StartBackgroundPerplexity(context.Background(), modules.MustGetPerplexityKey(), pReq, 90*time.Second, searchRecord.SearchID.String()+"_ai_summary", searchRecord.SearchID.String()+"_list", searchRecord, func(object, content string) {
+			go modules.StartBackgroundPerplexity(context.Background(), modules.MustGetPerplexityKey(), pReq, 90*time.Second, searchRecord.SearchID.String()+"_ai_summary", searchRecord.SearchID.String()+"_list", searchRecord, pool, req.PlatformName, func(object, content string) {
 				fmt.Printf("object=%s content_chunk=%q\n", object, content)
 			})
 
@@ -112,11 +112,11 @@ func SearchHandler(pool *pgxpool.Pool) echo.HandlerFunc {
 					"overrides": map[string]any{"return_videos": true, "return_images": true},
 				},
 				ReturnRelatedQuestions: true,
-				SearchDomainFilter:     []string{"youtube.com"},
-				Temperature:            0.2,
+				//SearchDomainFilter:     []string{"youtube.com"},
+				Temperature: 0.2,
 			}
 			// Background processing via module helper
-			go modules.StartBackgroundPerplexity(context.Background(), modules.MustGetPerplexityKey(), pReq, 90*time.Second, searchRecord.SearchID.String()+"_ai_summary", searchRecord.SearchID.String()+"_list", searchRecord, func(object, content string) {
+			go modules.StartBackgroundPerplexity(context.Background(), modules.MustGetPerplexityKey(), pReq, 90*time.Second, searchRecord.SearchID.String()+"_ai_summary", searchRecord.SearchID.String()+"_list", searchRecord, pool, req.PlatformName, func(object, content string) {
 				fmt.Printf("object=%s content_chunk=%q\n", object, content)
 			})
 		}

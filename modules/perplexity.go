@@ -13,7 +13,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/InvicttusGIT/BlinkAi_SearchEngineApps_Productivity_Backend/database"
 	importModel "github.com/InvicttusGIT/BlinkAi_SearchEngineApps_Productivity_Backend/models"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // helpers to choose non-zero enrichment values
@@ -40,6 +42,8 @@ type videoUpdate struct {
 }
 
 const perplexityURL = "https://api.perplexity.ai/chat/completions"
+
+//var combined_global = make([]importModel.CombinedItem, 0, 30)
 
 // Use types from models to avoid duplication
 
@@ -286,7 +290,7 @@ func StreamPerplexity(ctx context.Context, client *http.Client, apiKey string, r
 
 // ForwardStream reads SSE lines from r, logs object and content via logFn, and writes raw lines to w as SSE.
 // It extracts content either from choices[0].message.content or choices[0].delta.content if present.
-func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(object string, content string), search_id_ai_summary, search_id_list string) error {
+func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(object string, content string), search_id_ai_summary, search_id_list string, pool *pgxpool.Pool, searchRecord *importModel.Search, platoform string) error {
 	// Ensure SSE headers were already set by the caller.
 	// Ensure TCP broadcaster is up to stream chunk lines to TCP clients.
 	//ensureTCPBroadcaster(":9000")
@@ -313,7 +317,8 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 	}
 
 	_ = enc // keep for future expansions; currently not used directly
-
+	combined_global := make([]importModel.CombinedItem, 0, 30)
+	var wg sync.WaitGroup
 	firstListPrinted := false
 	lastNonEmptyContent := ""
 	for {
@@ -359,18 +364,17 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 			}
 		}
 		if !firstListPrinted {
-
 			firstListPrinted = true
 			// Build and print the initial combined list in a background goroutine
 			go func(c importModel.PerplexityChunk) {
 				// Build typed combined list from search_results, images, videos
 				seq := 1
-				combined := make([]importModel.CombinedItem, 0, 30)
+				//combined := make([]importModel.CombinedItem, 0, 30)
 				// search_results classified as video (YouTube) or web; both are citations
 				for _, sr := range c.SearchResults {
 					isYouTube := strings.Contains(sr.URL, "youtube.com") || strings.Contains(sr.URL, "youtu.be")
 					if isYouTube {
-						combined = append(combined, importModel.CombinedItem{
+						combined_global = append(combined_global, importModel.CombinedItem{
 							SeqNo:      seq,
 							IsCitation: true,
 							Kind:       "video",
@@ -390,7 +394,7 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 						seq++
 						continue
 					}
-					combined = append(combined, importModel.CombinedItem{
+					combined_global = append(combined_global, importModel.CombinedItem{
 						SeqNo:      seq,
 						IsCitation: true,
 						Kind:       "web",
@@ -409,7 +413,7 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 				}
 				// images (not citations)
 				for _, im := range c.Images {
-					combined = append(combined, importModel.CombinedItem{
+					combined_global = append(combined_global, importModel.CombinedItem{
 						SeqNo:      seq,
 						IsCitation: false,
 						Kind:       "image",
@@ -429,7 +433,7 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 				}
 				// videos (not citations)
 				for _, v := range c.Videos {
-					combined = append(combined, importModel.CombinedItem{
+					combined_global = append(combined_global, importModel.CombinedItem{
 						SeqNo:      seq,
 						IsCitation: false,
 						Kind:       "video",
@@ -445,7 +449,7 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 				//here at the end of the list also add the related search means it will also happens at the end of the list
 				// related questions (append as one grouped item at end)
 				if len(c.RelatedQuestions) > 0 {
-					combined = append(combined, importModel.CombinedItem{
+					combined_global = append(combined_global, importModel.CombinedItem{
 						SeqNo:      seq,
 						IsCitation: false,
 						Kind:       "related",
@@ -456,8 +460,10 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 					seq++
 				}
 
+				// snapshot to global for later access (e.g., at stop)
+				//combined_global = combined_global
 				// Print combined list once (pretty printed for readability)
-				if b, err := json.MarshalIndent(combined, "", "  "); err == nil {
+				if b, err := json.MarshalIndent(combined_global, "", "  "); err == nil {
 					fmt.Printf("combined_list:\n%s\n", string(b))
 					if search_id_list != "" {
 						sendToClient(search_id_list, string(b)+"\n")
@@ -466,12 +472,8 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 				// first socket can be initiated here to send data to extractors (non-blocking)
 				// Enrich YouTube video items asynchronously via ScrapingDog
 
-				for i := range combined {
-					// Enrich all items whose type is video, regardless of citation flag
-					if combined[i].Kind != "video" {
-						continue
-					}
-					v, ok := combined[i].Payload.(importModel.VideoItem)
+				for i := range combined_global {
+					v, ok := combined_global[i].Payload.(importModel.VideoItem)
 					if !ok {
 						continue
 					}
@@ -480,12 +482,41 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 					}
 					idx := i
 					urlStr := v.URL
-					time.Sleep(1 * time.Second)
+					if combined_global[idx].Kind == "related" {
+						continue
+					}
+					if combined_global[idx].Kind == "image" || combined_global[idx].Kind == "web" {
+						wg.Add(1)
+						go func() {
+							defer wg.Done()
+							fmt.Println("Processing image:", combined_global[idx].SeqNo)
+							time.Sleep(500 * time.Millisecond)
+
+						}()
+					}
+					// Enrich all items whose type is video, regardless of citation flag
+					// if combined_global[i].Kind != "video" {
+					// 	continue
+					// }
+
+					//this sleep is for the rate limit of the scrapingdog api if it is too low then due to concurrent request scrappingdog will give us 429 error code
+					//time.Sleep(1 * time.Second)
+					wg.Add(1)
 					go func() {
+						defer wg.Done()
 						if vid, ok := ExtractYouTubeID(urlStr); ok {
 							ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 							defer cancel()
-							if sd, err := FetchYouTubeDetails(ctx, vid); err == nil {
+
+							// minimal retry: if 429, wait briefly and try once more
+							sd, err := FetchYouTubeDetails(ctx, vid)
+							if err != nil && strings.Contains(err.Error(), "status 429") {
+								time.Sleep(1 * time.Second)
+								fmt.Println("ScrapingDog rate limit hit, retrying...", vid)
+								sd, err = FetchYouTubeDetails(ctx, vid)
+							}
+
+							if err == nil {
 								enr := BuildEnrichment(sd)
 								newPayload := importModel.VideoItem{
 									VideoID:         chooseString(enr.VideoID, v.VideoID),
@@ -494,15 +525,15 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 									ThumbnailHeight: chooseInt(enr.ThumbnailHeight, v.ThumbnailHeight),
 									ThumbnailURL:    chooseString(enr.ThumbnailURL, v.ThumbnailURL),
 									Title:           chooseString(enr.Title, v.Title),
-									Thumbnail:       v.Thumbnail,
-									PublishDate:     chooseString(enr.PublishDate, v.PublishDate),
-									Likes:           chooseInt(enr.Likes, v.Likes),
-									Views:           chooseInt(enr.Views, v.Views),
-									Description:     chooseString(enr.Description, v.Description),
+									//Thumbnail:       v.ThumbnailURL,
+									PublishDate: chooseString(enr.PublishDate, v.PublishDate),
+									Likes:       chooseInt(enr.Likes, v.Likes),
+									Views:       chooseInt(enr.Views, v.Views),
+									Description: chooseString(enr.Description, v.Description),
 								}
 								if b, err := json.MarshalIndent(videoUpdate{
-									SeqNo:      combined[idx].SeqNo,
-									IsCitation: combined[idx].IsCitation,
+									SeqNo:      combined_global[idx].SeqNo,
+									IsCitation: combined_global[idx].IsCitation,
 									Kind:       "video",
 									Payload:    newPayload,
 								}, "", "  "); err == nil {
@@ -510,16 +541,18 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 								}
 								if search_id_list != "" {
 									if b, err := json.Marshal(videoUpdate{
-										SeqNo:      combined[idx].SeqNo,
-										IsCitation: combined[idx].IsCitation,
+										SeqNo:      combined_global[idx].SeqNo,
+										IsCitation: combined_global[idx].IsCitation,
 										Kind:       "video",
 										Payload:    newPayload,
 									}); err == nil {
+										//here also update the combined list
+										combined_global[idx].Payload = newPayload
 										sendToClient(search_id_list, string(b)+"\n")
 									}
 								}
 							} else {
-								fmt.Printf("ScrapingDog error for seq_no=%d url=%s: %v\n", combined[idx].SeqNo, urlStr, err)
+								fmt.Printf("ScrapingDog error for seq_no=%d url=%s: %v\n", combined_global[idx].SeqNo, urlStr, err)
 							}
 						}
 					}()
@@ -535,6 +568,7 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 			// 	broadcastTCPLine(content + "\n")
 			// }
 			if content != "" && search_id_ai_summary != "" {
+				fmt.Println("content:------->", content)
 				sendToClient(search_id_ai_summary, content+"\n")
 			}
 		}
@@ -555,9 +589,78 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 				} else {
 					fmt.Printf("🧩 No non-empty content captured for %s before stop\n", search_id_ai_summary)
 				}
+				//waiting for the lists to be enriched with the json coming from the extractors
+				wg.Wait()
+				//Print combined list once more at stop using the latest snapshot
+				if b, err := json.MarshalIndent(combined_global, "", "  "); err == nil {
+					fmt.Printf("combined_list:\n%s\n", string(b))
+					// if search_id_list != "" {
+					// 	sendToClient(search_id_list, string(b)+"\n")
+					// }
+				}
+				//sending the list to the extractor api
+				go func() {
+					ProcessVideoExtraction(combined_global, searchRecord, platoform)
+				}()
+
 				if search_id_ai_summary != "" {
 					DisconnectClient(search_id_ai_summary)
 				}
+				if search_id_list != "" {
+					DisconnectClient(search_id_list)
+				}
+				// Persist response and items if DB is available and search record present
+				if pool != nil && searchRecord != nil {
+					sr, err := database.CreateSearchResponse(ctx, pool, searchRecord.SearchID, &lastNonEmptyContent)
+					if err != nil {
+						fmt.Printf("db: create search_response failed: %v\n", err)
+					} else {
+						for i := range combined_global {
+							item := combined_global[i]
+							seq := item.SeqNo
+							switch item.Kind {
+							case "video":
+								if v, ok := item.Payload.(importModel.VideoItem); ok {
+									vid, err := database.InsertVideoURL(ctx, pool, sr.ResponseID, item.IsCitation, &seq)
+									if err != nil {
+										fmt.Printf("db: insert video_urls failed: %v\n", err)
+										continue
+									}
+									url := v.URL
+									title := v.Title
+									thumb := v.ThumbnailURL
+									pub := database.ParseDatePtr(v.PublishDate)
+									likes := int64(v.Likes)
+									views := int64(v.Views)
+									desc := v.Description
+									vm := importModel.VideoMetadata{VideoID: vid, VideoURL: &url, Title: &title, Thumbnail: &thumb, PublishDate: pub, Likes: &likes, Views: &views, Description: &desc}
+									if err := database.InsertVideoMetadata(ctx, pool, vid, vm); err != nil {
+										fmt.Printf("db: insert video_metadata failed: %v\n", err)
+									}
+								}
+							case "web":
+								if witem, ok := item.Payload.(importModel.WebItem); ok {
+									if err := database.InsertWebURL(ctx, pool, sr.ResponseID, witem.URL, item.IsCitation, &seq); err != nil {
+										fmt.Printf("db: insert web_urls failed: %v\n", err)
+									}
+									if err := database.InsertWebMetadata(ctx, pool, witem); err != nil {
+										fmt.Printf("db: insert web_metadata failed: %v\n", err)
+									}
+								}
+							case "image":
+								if im, ok := item.Payload.(importModel.ImageItem); ok {
+									if err := database.InsertImageURL(ctx, pool, sr.ResponseID, im.OriginURL, item.IsCitation, &seq); err != nil {
+										fmt.Printf("db: insert image_urls failed: %v\n", err)
+									}
+									if err := database.InsertImageMetadata(ctx, pool, im); err != nil {
+										fmt.Printf("db: insert image_metadata failed: %v\n", err)
+									}
+								}
+							}
+						}
+					}
+				}
+
 				return nil
 			}
 		}
@@ -601,7 +704,7 @@ func BuildMessages(systemPrompt string, keywords []string) []importModel.ChatMes
 
 // StartBackgroundPerplexity starts a goroutine that streams from Perplexity and logs each chunk via logFn.
 // It uses io.Discard for output (no client streaming) and returns immediately.
-func StartBackgroundPerplexity(parent context.Context, apiKey string, req importModel.PerplexityRequest, timeout time.Duration, search_id_ai_summary string, search_id_list string, searchRecord *importModel.Search, logFn func(object, content string)) {
+func StartBackgroundPerplexity(parent context.Context, apiKey string, req importModel.PerplexityRequest, timeout time.Duration, search_id_ai_summary string, search_id_list string, searchRecord *importModel.Search, pool *pgxpool.Pool, platform string, logFn func(object, content string)) {
 	// Wait briefly for TCP client registration to avoid missing early chunks
 	//if searchRecord != nil {
 	//id := searchRecord.SearchID.String()
@@ -646,6 +749,6 @@ func StartBackgroundPerplexity(parent context.Context, apiKey string, req import
 		fmt.Println("--------------------------------")
 		fmt.Println("--------------------------------")
 
-		_ = ForwardStream(ctx, body, io.Discard, logFn, search_id_ai_summary, search_id_list)
+		_ = ForwardStream(ctx, body, io.Discard, logFn, search_id_ai_summary, search_id_list, pool, searchRecord, platform)
 	}()
 }

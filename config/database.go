@@ -27,7 +27,7 @@ func Connect(ctx context.Context) (*pgxpool.Pool, error) {
 	}
 
 	// Sensible pool defaults
-	cfg.MaxConns = 10
+	cfg.MaxConns = 10 ///we can add the number of connections here like 30-40
 	cfg.MinConns = 1
 	cfg.MaxConnIdleTime = 5 * time.Minute
 	cfg.HealthCheckPeriod = 30 * time.Second

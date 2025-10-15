@@ -1,0 +1,353 @@
+newChunk---->[
+  {
+    "seq_no": 1,
+    "is_citation": true,
+    "kind": "web",
+    "payload": {
+      "ai_overview": "",
+      "title": "Taylor Swift - Wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Taylor_Swift",
+      "date": "2006-06-04",
+      "last_updated": "2025-10-12",
+      "snippet": "Her accolades include 14 Grammy Awards—including a record four Album of the Year wins—and a Primetime Emmy Award. Swift is the most-awarded artist of the ...",
+      "source": "web",
+      "favicon": ""
+    }
+  },
+  {
+    "seq_no": 2,
+    "is_citation": true,
+    "kind": "web",
+    "payload": {
+      "ai_overview": "",
+      "title": "Cultural impact of Taylor Swift - Wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Cultural_impact_of_Taylor_Swift",
+      "date": "2023-05-05",
+      "last_updated": "2025-10-11",
+      "snippet": "One of the most prominent celebrities of the 21st century, Swift is recognized for her versatile musicality, songwriting prowess, and business acuity that have ...",
+      "source": "web",
+      "favicon": ""
+    }
+  },
+  {
+    "seq_no": 3,
+    "is_citation": true,
+    "kind": "web",
+    "payload": {
+      "ai_overview": "",
+      "title": "What are some of Taylor Swift's accomplishments? - Britannica",
+      "url": "https://www.britannica.com/question/What-are-some-of-Taylor-Swifts-accomplishments",
+      "date": "2025-10-06",
+      "last_updated": "2025-09-18",
+      "snippet": "In 2023 she was named Spotify's most-played artist, and in 2024 she became the first person to win the Grammy Award for album of the year four ...",
+      "source": "web",
+      "favicon": ""
+    }
+  },
+  {
+    "seq_no": 4,
+    "is_citation": true,
+    "kind": "web",
+    "payload": {
+      "ai_overview": "",
+      "title": "Why Taylor Swift Is So Popular (Berklee's Version)",
+      "url": "https://www.berklee.edu/berklee-now/news/taylor-swifts-global-popularity-explained-berklees-version",
+      "date": "2024-06-04",
+      "last_updated": "2025-10-03",
+      "snippet": "Why Taylor Swift Is So Popular (Berklee's Version) · Her Approach Is Family-Oriented · Her Concerts Somehow Feel Intimate · Her Brand Is Truly Personal · Her ...",
+      "source": "web",
+      "favicon": ""
+    }
+  },
+  {
+    "seq_no": 5,
+    "is_citation": true,
+    "kind": "web",
+    "payload": {
+      "ai_overview": "",
+      "title": "List of awards and nominations received by Taylor Swift - Wikipedia",
+      "url": "https://en.wikipedia.org/wiki/List_of_awards_and_nominations_received_by_Taylor_Swift",
+      "date": "2008-12-05",
+      "last_updated": "2025-10-02",
+      "snippet": "She is the most-awarded artist of the American Music Awards (40), the Billboard Music Awards (49), the MTV Video Music Awards (30), and the iHeartRadio Music ...",
+      "source": "web",
+      "favicon": ""
+    }
+  },
+  {
+    "seq_no": 6,
+    "is_citation": true,
+    "kind": "web",
+    "payload": {
+      "ai_overview": "",
+      "title": "So what exactly makes Taylor Swift so great? - Harvard Gazette",
+      "url": "https://news.harvard.edu/gazette/story/2023/08/so-what-exactly-makes-taylor-swift-so-great/",
+      "date": "2023-08-02",
+      "last_updated": "2025-10-12",
+      "snippet": "Experts weigh in on her fanbase loyalty, skills as songwriter, businesswoman as her albums, tours break financial, popularity records.",
+      "source": "web",
+      "favicon": ""
+    }
+  },
+  {
+    "seq_no": 7,
+    "is_citation": true,
+    "kind": "web",
+    "payload": {
+      "ai_overview": "",
+      "title": "Taylor Swift's career: Her biggest highlights so far (2025) - Rayo",
+      "url": "https://hellorayo.co.uk/hits-radio/entertainment/music/taylor-swift-career",
+      "date": "2022-08-25",
+      "last_updated": "2025-10-14",
+      "snippet": "She won Best Female Country Vocal Performance for her song 'White Horse'. She won three other Grammy awards on that date, Best Country Song, Best Country Album ...",
+      "source": "web",
+      "favicon": ""
+    }
+  },
+  {
+    "seq_no": 8,
+    "is_citation": true,
+    "kind": "web",
+    "payload": {
+      "ai_overview": "",
+      "title": "What Makes Taylor Swift the Pop Icon She Is? - Boston University",
+      "url": "https://www.bu.edu/articles/2023/what-makes-taylor-swift-the-pop-icon-she-is/",
+      "date": "2023-11-01",
+      "last_updated": "2025-10-13",
+      "snippet": "She is a great musician. · She treats her fans well. · She inspires other young artists to be smart businesspeople. · Her music also inspires and ...",
+      "source": "web",
+      "favicon": ""
+    }
+  },
+  {
+    "seq_no": 9,
+    "is_citation": true,
+    "kind": "web",
+    "payload": {
+      "ai_overview": "",
+      "title": "How Taylor Swift Masterminded Global Success, Explained by ...",
+      "url": "https://musicanddance.uoregon.edu/TaylorSwift",
+      "date": "2023-11-01",
+      "last_updated": "2025-10-14",
+      "snippet": "Between her wildly popular Eras Tour, mastery of the Billboard charts, billion-dollar fortune, twelve Grammy Awards, domination of the pop culture headlines, ...",
+      "source": "web",
+      "favicon": ""
+    }
+  },
+  {
+    "seq_no": 10,
+    "is_citation": true,
+    "kind": "web",
+    "payload": {
+      "ai_overview": "",
+      "title": "Life and Career | Taylor Swift Museum",
+      "url": "https://www.theswiftmuseum.com/life-and-career",
+      "date": "2016-01-01",
+      "last_updated": "2025-10-13",
+      "snippet": "Swift won several awards for Speak Now, including Songwriter of the Year at the BMI Awards, Entertainer of the Year at the ACMs and CMAs, and was named ...",
+      "source": "web",
+      "favicon": ""
+    }
+  },
+  {
+    "seq_no": 11,
+    "is_citation": true,
+    "kind": "web",
+    "payload": {
+      "ai_overview": "",
+      "title": "Let's Set the Record Straight: Insight into Taylor Swift's ...",
+      "url": "https://www.lpslions.org/article/1474216",
+      "date": "2024-02-23",
+      "last_updated": "2025-09-02",
+      "snippet": "Regarding the Grammys, Swift is the first person in history to receive “Album of the Year” 4 times. She has received this award for her albums ...",
+      "source": "web",
+      "favicon": ""
+    }
+  },
+  {
+    "seq_no": 12,
+    "is_citation": true,
+    "kind": "web",
+    "payload": {
+      "ai_overview": "",
+      "title": "Achievements - Taylor Swift",
+      "url": "https://taylorswiftfanculture.weebly.com/achievements.html",
+      "date": "2014-01-01",
+      "last_updated": "2025-10-13",
+      "snippet": "Taylor wins Artist/Songwriter of the year at Nashville Songwriters Association · Taylor wins the CMA Horizon Award · Taylor achieves her first NUMBER 1 single ...",
+      "source": "web",
+      "favicon": ""
+    }
+  },
+  {
+    "seq_no": 13,
+    "is_citation": false,
+    "kind": "image",
+    "payload": {
+      "ai_overview": "",
+      "image_url": "https://img.officetimeline.com/uploads/assets/lg_taylor_swift_timeline_2260190d5d.webp",
+      "origin_url": "https://www.officetimeline.com/blog/taylor-swift-timeline",
+      "height": 720,
+      "width": 1280,
+      "title": "Taylor Swift timeline",
+      "snippet": "",
+      "favicon": "",
+      "source": ""
+    }
+  },
+  {
+    "seq_no": 14,
+    "is_citation": false,
+    "kind": "image",
+    "payload": {
+      "ai_overview": "",
+      "image_url": "https://taylorswift1212.wordpress.com/wp-content/uploads/2014/07/taylor-swift-picture13.jpg",
+      "origin_url": "https://taylorswift1212.wordpress.com/accomplishments/",
+      "height": 512,
+      "width": 354,
+      "title": "Accomplishments | Taylor Swift",
+      "snippet": "",
+      "favicon": "",
+      "source": ""
+    }
+  },
+  {
+    "seq_no": 15,
+    "is_citation": false,
+    "kind": "image",
+    "payload": {
+      "ai_overview": "",
+      "image_url": "https://i.iheart.com/v3/re/new_assets/5cc3213586a175aa51919fcd?ops=contain(1480,0)",
+      "origin_url": "https://www.iheart.com/content/2019-04-26-looking-back-at-taylor-swifts-10-greatest-accomplishments-of-her-career/",
+      "height": 835,
+      "width": 1480,
+      "title": "Looking Back At Taylor Swift's 10 Greatest Accomplishments ...",
+      "snippet": "",
+      "favicon": "",
+      "source": ""
+    }
+  },
+  {
+    "seq_no": 16,
+    "is_citation": false,
+    "kind": "image",
+    "payload": {
+      "ai_overview": "",
+      "image_url": "https://cdn.apollo.audio/one/media/6669/68be/76a4/4005/b5e9/bc25/taylor-swift-awards-wins-records-history.jpg",
+      "origin_url": "https://hellorayo.co.uk/hits-radio/entertainment/music/taylor-swift-awards",
+      "height": 934,
+      "width": 1661,
+      "title": "Taylor Swift's awards: The biggest accolades she's won to ...",
+      "snippet": "",
+      "favicon": "",
+      "source": ""
+    }
+  },
+  {
+    "seq_no": 17,
+    "is_citation": false,
+    "kind": "image",
+    "payload": {
+      "ai_overview": "",
+      "image_url": "https://core-docs.s3.amazonaws.com/louisville_public_schools_ar/article/image/399fec74-b297-42e5-91f9-5a420c1f3c5d.png",
+      "origin_url": "https://www.lpslions.org/article/1474216",
+      "height": 295,
+      "width": 295,
+      "title": "Let's Set the Record Straight: Insight into Taylor Swift's ...",
+      "snippet": "",
+      "favicon": "",
+      "source": ""
+    }
+  },
+  {
+    "seq_no": 18,
+    "is_citation": false,
+    "kind": "video",
+    "payload": {
+      "video_id": "",
+      "url": "https://www.youtube.com/watch?v=pe9_RIpeqdo",
+      "thumbnail_width": 480,
+      "thumbnail_height": 360,
+      "thumbnail_url": "https://www.youtube.com/watch?v=pe9_RIpeqdo",
+      "title": "",
+      "publish_date": "",
+      "likes": 0,
+      "views": 0,
+      "description": ""
+    }
+  },
+  {
+    "seq_no": 19,
+    "is_citation": false,
+    "kind": "video",
+    "payload": {
+      "video_id": "",
+      "url": "https://www.youtube.com/watch?v=r37zUkpA9mM",
+      "thumbnail_width": 480,
+      "thumbnail_height": 360,
+      "thumbnail_url": "https://www.youtube.com/watch?v=r37zUkpA9mM",
+      "title": "",
+      "publish_date": "",
+      "likes": 0,
+      "views": 0,
+      "description": ""
+    }
+  },
+  {
+    "seq_no": 20,
+    "is_citation": false,
+    "kind": "video",
+    "payload": {
+      "video_id": "",
+      "url": "https://www.youtube.com/watch?v=fmxPhTQMZEs",
+      "thumbnail_width": 480,
+      "thumbnail_height": 360,
+      "thumbnail_url": "https://www.youtube.com/watch?v=fmxPhTQMZEs",
+      "title": "",
+      "publish_date": "",
+      "likes": 0,
+      "views": 0,
+      "description": ""
+    }
+  },
+  {
+    "seq_no": 21,
+    "is_citation": false,
+    "kind": "video",
+    "payload": {
+      "video_id": "",
+      "url": "https://www.youtube.com/watch?v=ZVpkFb9-fts",
+      "thumbnail_width": 480,
+      "thumbnail_height": 360,
+      "thumbnail_url": "https://www.youtube.com/watch?v=ZVpkFb9-fts",
+      "title": "",
+      "publish_date": "",
+      "likes": 0,
+      "views": 0,
+      "description": ""
+    }
+  },
+  {
+    "seq_no": 22,
+    "is_citation": false,
+    "kind": "related",
+    "payload": {
+      "queries": [
+        "How has Taylor Swift's music evolved over the years",
+        "What are some of Taylor Swift's most iconic performances",
+        "How has Taylor Swift influenced other artists in the music industry",
+        "What makes Taylor Swift's fanbase so loyal",
+        "How has Taylor Swift's business acumen contributed to her success"
+      ]
+    }
+  }
+]
+
+newChunk---->{"seq_no":20,"is_citation":false,"kind":"video","payload":{"video_id":"fmxPhTQMZEs","url":"https://www.youtube.com/watch?v=fmxPhTQMZEs","thumbnail_width":480,"thumbnail_height":360,"thumbnail_url":"https://i.ytimg.com/vi/fmxPhTQMZEs/maxresdefault.jpg","title":"🎸 Taylor Swift: The Journey of a Global Icon 🎸","publish_date":"","likes":0,"views":322,"description":"Welcome to a Deep Dive into the incredible story of Taylor Swift — a journey filled with record-breaking achievements, bold transformations, and a relentless pursuit of artistic freedom.\n\nIn this video, our fictional hosts, Trudie and Rick, discuss Taylor's path from a small-town country singer to one of the most powerful and influential figures in music and culture. We’ll explore how she became Time’s Person of the Year, broke barriers, and created an unbreakable connection with fans worldwide.\n\nWhether you're a longtime Swiftie or simply curious about the journey of a modern music legend, this video will give you an inside look at the choices, challenges, and career-defining moments that make Taylor Swift an unstoppable force.\n\n🔥 Join us to uncover:\n\nThe roots of her artistic journey\nHer evolution across genres and personal reinventions\nThe battles she’s fought for creative control and ownership\nThe cultural impact she’s made across the globe\n✨ This podcast is an experiment using AI-generated voices and fictional hosts, Trudie and Rick, who bring you Taylor’s story in an engaging, narrative format.\n\nNote: This is an experiment. The audio was generated using Google NotebookLM and is based on the following web pages:\n\nHome - Taylor Swift\nhttps://www.taylorswift.com/\n\nTaylor Swift - Wikipedia\nhttps://en.wikipedia.org/wiki/Taylor_...\n\nTaylor Swift - IMDb\nhttps://www.imdb.com/name/nm2357847/\n\nLife and Career | Taylor Swift Museum\nhttps://www.theswiftmuseum.com/life-a...\n\n‘She dominates our age’: how Taylor Swift became the greatest show on Earth | Taylor Swift | The Guardian\nhttps://www.theguardian.com/music/art...\n\nIf you enjoyed this video, don’t forget to like, subscribe, and leave a comment! Let us know what other stories you’d love for us to dive into.\n\n#TaylorSwift #DeepDive #TrudieAndRick #GlobalIcon #MusicLegends #Podcast #AIExperiment"}}
+
+newChunk---->{"seq_no":21,"is_citation":false,"kind":"video","payload":{"video_id":"ZVpkFb9-fts","url":"https://www.youtube.com/watch?v=ZVpkFb9-fts","thumbnail_width":480,"thumbnail_height":360,"thumbnail_url":"https://i.ytimg.com/vi/ZVpkFb9-fts/maxresdefault.jpg","title":"Taylor Swift Accepts Woman of the Decade Award | Women In Music","publish_date":"","likes":0,"views":4401420,"description":"Taylor Swift Accepts the Woman of the Decade Award at Billboard’s Women in Music 2019!\n\n#TaylorSwift #WomenInMusic #Billboard #WomenInMusic2019 #WomanOfTheDecade\n\nSubscribe for The Latest Hot 100 Charts \u0026 ALL Music News! ►► https://bitly.com/BillboardSub\nBillboard News: New Channel, Same Awesome ►► http://bit.ly/DailyMusicNews"}}
+
+newChunk---->{"seq_no":18,"is_citation":false,"kind":"video","payload":{"video_id":"pe9_RIpeqdo","url":"https://www.youtube.com/watch?v=pe9_RIpeqdo","thumbnail_width":480,"thumbnail_height":360,"thumbnail_url":"https://i.ytimg.com/vi/pe9_RIpeqdo/maxresdefault.jpg","title":"Taylor Swift's Top 10 Biggest Career Moments","publish_date":"","likes":0,"views":28598,"description":"Taylor Swift's career has been nothing but ups! Welcome to MsMojo and today we’re counting down our picks for the greatest career highlights of the one and only Taylor Swift, so hold on to your cats and let’s go. Our countdown includes Taylor's versions, \"Miss Americana,\" 52nd Annual Grammy Awards, and more! Which of these phenomenal career moments resonated with YOU the most? What other Taylor-ific moments should have made the list? Let us know in the comments below!\r\n\r\nWatch more great Taylor Swift videos here: \r\nA Deep Dive into Every Single Taylor Swift Era -    • A Deep Dive into Every Single Taylor Swift...   \r\nTop 10 Times Taylor Swift Truly Was a Mastermind -    • Top 10 Times Taylor Swift Truly Was a Mast...   \r\nTop 20 Most Underrated Taylor Swift Songs -    • Top 20 Most Underrated Taylor Swift Songs   \r\n\r\nDon't forget to play our Live Trivia games at 3pm EST for a chance to win cash! The faster you answer, the more points you get!: https://www.watchmojo.com/play\r\n\r\nHave Your Idea Become A Video!\r\nhttps://wmojo.com/msmojo-suggest\r\n\r\nSubscribe for more great content!\r\nhttps://wmojo.com/msmojo-subscribe\r\n\r\nMsMojo is a leading producer of reference online video content of Top 10 Lists, Origins, Biographies, Commentary and more on Pop Culture, Celebrity, Movies, Music, TV, Film, Video Games, Politics, News, Comics, Superheroes. Your trusted authority on ranking Pop Culture.\r\n\r\n#TaylorSwift #Career #Music #Swifties #Songs"}}
+
+newChunk---->{"seq_no":19,"is_citation":false,"kind":"video","payload":{"video_id":"r37zUkpA9mM","url":"https://www.youtube.com/watch?v=r37zUkpA9mM","thumbnail_width":480,"thumbnail_height":360,"thumbnail_url":"https://i.ytimg.com/vi/r37zUkpA9mM/maxresdefault.jpg","title":"Taylor Swift’s Top Seven Biggest Career Highlights \u0026 Accomplishments | THR News","publish_date":"","likes":0,"views":4511,"description":"On Taylor Swift’s 32nd birthday, we’re celebrating her by taking a look at some of her biggest career highlights and accomplishments. \n\nTo learn more about this story:   \n\n\n►►Subscribe for more entertainment news: http://thr.cm/dwtPxG2\n►► See our latest videos: http://thr.cm/syLedfw\n\nAbout: The Hollywood Reporter (THR) is the entertainment industry's flagship media brand, offering in-depth reporting, analysis, unparalleled access, world-class photography and video, and feature exclusives in its award-winning weekly magazine and dynamic website. The Hollywood Reporter also boasts prestigious live events, industry-leading philanthropic, empowerment and diversity initiatives and hugely successful video series.\n\nConnect with The Hollywood Reporter Online:\nVisit the website: http://thr.cm/MgwCFl9\nLikes us on Facebook: http://thr.cm/ngIBL8l\nFollow us on Twitter: http://thr.cm/2S875k7\nFollow us on Instagram: http://thr.cm/cDQoWQd\n\n#TaylorSwift #TaylorSwiftCareerHighlights #THRNews \n\nTaylor Swift’s Top Seven Biggest Career Highlights \u0026 Accomplishments | THR News\n\n\nThe Hollywood Reporter\n   / hollywoodreporter  "}}
+

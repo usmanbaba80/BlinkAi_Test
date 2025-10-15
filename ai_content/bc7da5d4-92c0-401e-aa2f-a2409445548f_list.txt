@@ -1,0 +1,127 @@
+newChunk---->[
+  {
+    "seq_no": 1,
+    "is_citation": true,
+    "kind": "web",
+    "payload": {
+      "ai_overview": "",
+      "title": "NBA Standings - 2025-26 season - ESPN",
+      "url": "https://www.espn.com/nba/standings",
+      "date": "2025-10-14",
+      "last_updated": "2025-10-14",
+      "snippet": "Visit ESPN for the complete 2025-26 NBA season standings. Includes league, conference and division standings for regular season and playoffs.",
+      "source": "web",
+      "favicon": ""
+    }
+  },
+  {
+    "seq_no": 2,
+    "is_citation": true,
+    "kind": "web",
+    "payload": {
+      "ai_overview": "",
+      "title": "National Basketball Association - Wikipedia",
+      "url": "https://en.wikipedia.org/wiki/National_Basketball_Association",
+      "date": "2002-02-25",
+      "last_updated": "2025-10-13",
+      "snippet": "The National Basketball Association (NBA) is a professional basketball league in North America composed of 30 teams (29 in the United States and 1 in Canada).",
+      "source": "web",
+      "favicon": ""
+    }
+  },
+  {
+    "seq_no": 3,
+    "is_citation": true,
+    "kind": "web",
+    "payload": {
+      "ai_overview": "",
+      "title": "NBA Schedule - 2025 Season - ESPN",
+      "url": "https://www.espn.com/nba/schedule",
+      "date": "2025-10-14",
+      "last_updated": "2025-10-14",
+      "snippet": "The complete 2025 NBA season schedule on ESPN. Includes game times, TV listings and ticket information for all NBA games.",
+      "source": "web",
+      "favicon": ""
+    }
+  },
+  {
+    "seq_no": 4,
+    "is_citation": false,
+    "kind": "image",
+    "payload": {
+      "ai_overview": "",
+      "image_url": "https://upload.wikimedia.org/wikipedia/en/thumb/0/03/National_Basketball_Association_logo.svg/120px-National_Basketball_Association_logo.svg.png",
+      "origin_url": "https://en.wikipedia.org/wiki/National_Basketball_Association",
+      "height": 273,
+      "width": 120,
+      "title": "National Basketball Association - Wikipedia",
+      "snippet": "",
+      "favicon": "",
+      "source": ""
+    }
+  },
+  {
+    "seq_no": 5,
+    "is_citation": false,
+    "kind": "image",
+    "payload": {
+      "ai_overview": "",
+      "image_url": "https://images.ctfassets.net/h8q6lxmb5akt/5qXnOINbPrHKXWa42m6NOa/421ab176b501f5bdae71290a8002545c/nba-logo_2x.png",
+      "origin_url": "https://www.andyedge.com/articles/nba-logo",
+      "height": 540,
+      "width": 704,
+      "title": "NBA Logo and the Legend of Jerry West",
+      "snippet": "",
+      "favicon": "",
+      "source": ""
+    }
+  },
+  {
+    "seq_no": 6,
+    "is_citation": false,
+    "kind": "image",
+    "payload": {
+      "ai_overview": "",
+      "image_url": "https://cdn.phenompeople.com/CareerConnectResources/NBANBAUS/social/1024x512-1670500646586.jpg",
+      "origin_url": "https://careers.nba.com/about-us/",
+      "height": 512,
+      "width": 1024,
+      "title": "Passionate About Basketball | NBA",
+      "snippet": "",
+      "favicon": "",
+      "source": ""
+    }
+  },
+  {
+    "seq_no": 7,
+    "is_citation": false,
+    "kind": "video",
+    "payload": {
+      "video_id": "",
+      "url": "https://www.youtube.com/user/NBA",
+      "thumbnail_width": 480,
+      "thumbnail_height": 360,
+      "thumbnail_url": "https://www.youtube.com/user/NBA",
+      "title": "",
+      "publish_date": "",
+      "likes": 0,
+      "views": 0,
+      "description": ""
+    }
+  },
+  {
+    "seq_no": 8,
+    "is_citation": false,
+    "kind": "related",
+    "payload": {
+      "queries": [
+        "Who are the top players in the 2025-26 NBA season",
+        "What are the key storylines for the 2025-26 NBA season",
+        "How did the Oklahoma City Thunder win the 2025 NBA Finals",
+        "What are the most memorable moments in NBA history",
+        "How has the NBA evolved since its founding in 1946"
+      ]
+    }
+  }
+]
+

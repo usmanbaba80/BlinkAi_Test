@@ -43,6 +43,29 @@ type videoUpdate struct {
 
 const perplexityURL = "https://api.perplexity.ai/chat/completions"
 
+// AppendContentToFile appends content lines to a per-request text file identified by searchID.
+// The file is created on first write in a dedicated directory.
+func AppendContentToFile(searchID, content string) error {
+	if strings.TrimSpace(searchID) == "" || strings.TrimSpace(content) == "" {
+		return nil
+	}
+	dir := "ai_content"
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	path := fmt.Sprintf("%s/%s.txt", dir, searchID)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	// Write a newline-terminated content chunk
+	if _, err := f.WriteString(content + "\n"); err != nil {
+		return err
+	}
+	return nil
+}
+
 //var combined_global = make([]importModel.CombinedItem, 0, 30)
 
 // Use types from models to avoid duplication
@@ -186,7 +209,13 @@ func handleClient(conn net.Conn) {
 }
 
 func streamToClient(client *ClientConnection) {
+
 	for msg := range client.MsgCh {
+		if len(client.MsgCh) == cap(client.MsgCh) {
+			fmt.Printf("list socket backlog full for %s: %d/%d; dropping newest\n", client.SearchID, len(client.MsgCh), cap(client.MsgCh))
+		}
+		fmt.Printf("queue depth for %s: %d/%d\n", client.SearchID, len(client.MsgCh), cap(client.MsgCh))
+
 		// Debug print suppressed
 		_, err := client.Conn.Write([]byte(msg))
 		if err != nil {
@@ -201,6 +230,8 @@ func streamToClient(client *ClientConnection) {
 }
 
 func sendToClient(searchID, chunk string) {
+	fmt.Println("AAAAAA-->", chunk)
+
 	clientRegistryLock.RLock()
 	client, ok := clientRegistry[searchID]
 	clientRegistryLock.RUnlock()
@@ -214,6 +245,7 @@ func sendToClient(searchID, chunk string) {
 	default:
 		// Debug print suppressed
 	}
+	//_ = AppendContentToFile(searchID, "newChunk---->"+chunk)
 }
 
 // WaitForClientRegistered blocks until a client with the given searchID is registered
@@ -466,7 +498,7 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 				if b, err := json.MarshalIndent(combined_global, "", "  "); err == nil {
 					fmt.Printf("combined_list:\n%s\n", string(b))
 					if search_id_list != "" {
-						sendToClient(search_id_list, string(b)+"\n")
+						sendToClient(search_id_list, string(b)+search_id_list+"\n")
 					}
 				}
 				// first socket can be initiated here to send data to extractors (non-blocking)
@@ -548,7 +580,8 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 									}); err == nil {
 										//here also update the combined list
 										combined_global[idx].Payload = newPayload
-										sendToClient(search_id_list, string(b)+"\n")
+										sendToClient(search_id_list, string(b)+search_id_list+"\n")
+										//fmt.Println(b)
 									}
 								}
 							} else {
@@ -561,19 +594,16 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 
 		}
 		if logFn != nil {
-			// logFn(chunk.Object, content) // content printing disabled per request
-			// second socket can stream chunk content if needed
-			// server go routine to send data to the client (TCP broadcast)
-			// if content != "" {
-			// 	broadcastTCPLine(content + "\n")
-			// }
+
 			if content != "" && search_id_ai_summary != "" {
-				fmt.Println("content:------->", content)
-				sendToClient(search_id_ai_summary, content+"\n")
+				//fmt.Println("content:------->", content)
+				sendToClient(search_id_ai_summary, content+search_id_ai_summary+"\n")
 			}
 		}
 		if content != "" {
 			lastNonEmptyContent = content
+			// 	// Append AI content to a per-request text file
+			//_ = AppendContentToFile(search_id_ai_summary, content)
 		}
 		// If the provider signals completion via finish_reason in the last chunk, end the loop
 		if len(chunk.Choices) > 0 && chunk.Choices[0].FinishReason != nil {
@@ -592,12 +622,12 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 				//waiting for the lists to be enriched with the json coming from the extractors
 				wg.Wait()
 				//Print combined list once more at stop using the latest snapshot
-				if b, err := json.MarshalIndent(combined_global, "", "  "); err == nil {
-					fmt.Printf("combined_list:\n%s\n", string(b))
-					// if search_id_list != "" {
-					// 	sendToClient(search_id_list, string(b)+"\n")
-					// }
-				}
+				// if b, err := json.MarshalIndent(combined_global, "", "  "); err == nil {
+				// 	fmt.Printf("combined_list:\n%s\n", string(b))
+				// 	// if search_id_list != "" {
+				// 	// 	sendToClient(search_id_list, string(b)+"\n")
+				// 	// }
+				// }
 				//sending the list to the extractor api
 				go func() {
 					ProcessVideoExtraction(combined_global, searchRecord, platoform)
@@ -732,22 +762,29 @@ func StartBackgroundPerplexity(parent context.Context, apiKey string, req import
 		body, _, err := StreamPerplexity(ctx, nil, apiKey, req)
 		if err != nil {
 			fmt.Printf("Perplexity error: %v\n", err)
+			// Immediately close any registered TCP clients for this search to avoid dangling sockets
+			if search_id_ai_summary != "" {
+				DisconnectClient(search_id_ai_summary)
+			}
+			if search_id_list != "" {
+				DisconnectClient(search_id_list)
+			}
 			return
 		}
 		defer body.Close()
-		fmt.Println("--------------------------------")
-		fmt.Println("--------------------------------")
-		fmt.Println("--------------------------------")
-		fmt.Println("--------------------------------")
-		fmt.Println("--------------------------------")
-		fmt.Println("--------------------------------")
-		fmt.Println("SearchID that has sent to the client:", search_id_ai_summary)
-		fmt.Println("--------------------------------")
-		fmt.Println("--------------------------------")
-		fmt.Println("--------------------------------")
-		fmt.Println("--------------------------------")
-		fmt.Println("--------------------------------")
-		fmt.Println("--------------------------------")
+		// fmt.Println("--------------------------------")
+		// fmt.Println("--------------------------------")
+		// fmt.Println("--------------------------------")
+		// fmt.Println("--------------------------------")
+		// fmt.Println("--------------------------------")
+		// fmt.Println("--------------------------------")
+		// fmt.Println("SearchID that has sent to the client:", search_id_ai_summary)
+		// fmt.Println("--------------------------------")
+		// fmt.Println("--------------------------------")
+		// fmt.Println("--------------------------------")
+		// fmt.Println("--------------------------------")
+		// fmt.Println("--------------------------------")
+		// fmt.Println("--------------------------------")
 
 		_ = ForwardStream(ctx, body, io.Discard, logFn, search_id_ai_summary, search_id_list, pool, searchRecord, platform)
 	}()

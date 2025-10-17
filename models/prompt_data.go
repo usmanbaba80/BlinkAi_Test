@@ -9,4 +9,5 @@ type PromptData struct {
 	ID         uuid.UUID `json:"id"`
 	SearchType string    `json:"search_type"`
 	PromptText string    `json:"prompt_text"`
+	Platform   string    `json:"platform"`
 }

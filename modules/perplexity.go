@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/InvicttusGIT/BlinkAi_SearchEngineApps_Productivity_Backend/database"
+	//"github.com/InvicttusGIT/BlinkAi_SearchEngineApps_Productivity_Backend/models"
 	importModel "github.com/InvicttusGIT/BlinkAi_SearchEngineApps_Productivity_Backend/models"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -33,13 +34,13 @@ func chooseInt(a int, fallback int) int {
 	return fallback
 }
 
-// wrapped update structure to preserve JSON field order
-type videoUpdate struct {
-	SeqNo      int                   `json:"seq_no"`
-	IsCitation bool                  `json:"is_citation"`
-	Kind       string                `json:"kind"`
-	Payload    importModel.VideoItem `json:"payload"`
-}
+// // wrapped update structure to preserve JSON field order
+// type videoUpdate struct {
+// 	SeqNo      int                   `json:"seq_no"`
+// 	IsCitation bool                  `json:"is_citation"`
+// 	Kind       string                `json:"kind"`
+// 	Payload    importModel.VideoItem `json:"payload"`
+// }
 
 const perplexityURL = "https://api.perplexity.ai/chat/completions"
 
@@ -146,6 +147,8 @@ type ClientConnection struct {
 	SearchID string
 	Conn     net.Conn
 	MsgCh    chan string
+	mu       sync.Mutex
+	closed   bool
 }
 
 var (
@@ -211,10 +214,10 @@ func handleClient(conn net.Conn) {
 func streamToClient(client *ClientConnection) {
 
 	for msg := range client.MsgCh {
-		if len(client.MsgCh) == cap(client.MsgCh) {
-			fmt.Printf("list socket backlog full for %s: %d/%d; dropping newest\n", client.SearchID, len(client.MsgCh), cap(client.MsgCh))
-		}
-		fmt.Printf("queue depth for %s: %d/%d\n", client.SearchID, len(client.MsgCh), cap(client.MsgCh))
+		// if len(client.MsgCh) == cap(client.MsgCh) {
+		// 	fmt.Printf("list socket backlog full for %s: %d/%d; dropping newest\n", client.SearchID, len(client.MsgCh), cap(client.MsgCh))
+		// }
+		// fmt.Printf("queue depth for %s: %d/%d\n", client.SearchID, len(client.MsgCh), cap(client.MsgCh))
 
 		// Debug print suppressed
 		_, err := client.Conn.Write([]byte(msg))
@@ -230,8 +233,6 @@ func streamToClient(client *ClientConnection) {
 }
 
 func sendToClient(searchID, chunk string) {
-	fmt.Println("AAAAAA-->", chunk)
-
 	clientRegistryLock.RLock()
 	client, ok := clientRegistry[searchID]
 	clientRegistryLock.RUnlock()
@@ -239,12 +240,19 @@ func sendToClient(searchID, chunk string) {
 		fmt.Println("ℹ️ No registered client for searchID:", searchID, "— skipping send")
 		return
 	}
+	// Serialize with client close to avoid sending on a closed channel
+	client.mu.Lock()
+	if client.closed {
+		client.mu.Unlock()
+		return
+	}
 	select {
 	case client.MsgCh <- chunk:
-		// Debug print suppressed
+		// sent
 	default:
-		// Debug print suppressed
+		// drop if full
 	}
+	client.mu.Unlock()
 	//_ = AppendContentToFile(searchID, "newChunk---->"+chunk)
 }
 
@@ -279,11 +287,13 @@ func DisconnectClient(searchID string) {
 		return
 	}
 	fmt.Println("👋 Gracefully closing client:", searchID)
-	// Close channel safely in case it's already closed
-	func() {
-		defer func() { _ = recover() }()
+	// Guard close with client mutex to avoid concurrent sends panicking
+	client.mu.Lock()
+	if !client.closed {
+		client.closed = true
 		close(client.MsgCh)
-	}()
+	}
+	client.mu.Unlock()
 	_ = client.Conn.Close()
 }
 
@@ -401,11 +411,34 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 			go func(c importModel.PerplexityChunk) {
 				// Build typed combined list from search_results, images, videos
 				seq := 1
+				// Per-kind seen sets to avoid duplicates
+				normalize := func(u string) string {
+					u = strings.TrimSpace(u)
+					u = strings.ToLower(u)
+					// drop trailing slash for stability
+					for strings.HasSuffix(u, "/") {
+						u = strings.TrimSuffix(u, "/")
+					}
+					return u
+				}
+				seenVideo := make(map[string]struct{}, 64)
+				seenWeb := make(map[string]struct{}, 64)
+				seenImage := make(map[string]struct{}, 64)
 				//combined := make([]importModel.CombinedItem, 0, 30)
 				// search_results classified as video (YouTube) or web; both are citations
 				for _, sr := range c.SearchResults {
+
 					isYouTube := strings.Contains(sr.URL, "youtube.com") || strings.Contains(sr.URL, "youtu.be")
 					if isYouTube {
+						// Skip YouTube channel and shorts URLs
+						if strings.Contains(sr.URL, "/channel/") || strings.Contains(sr.URL, "/shorts/") {
+							continue
+						}
+						key := normalize(sr.URL)
+						if _, dup := seenVideo[key]; dup {
+							continue
+						}
+						seenVideo[key] = struct{}{}
 						combined_global = append(combined_global, importModel.CombinedItem{
 							SeqNo:      seq,
 							IsCitation: true,
@@ -426,6 +459,13 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 						seq++
 						continue
 					}
+					// Dedupe web by URL
+					wkey := normalize(sr.URL)
+					if _, dup := seenWeb[wkey]; dup {
+						seq++
+						continue
+					}
+					seenWeb[wkey] = struct{}{}
 					combined_global = append(combined_global, importModel.CombinedItem{
 						SeqNo:      seq,
 						IsCitation: true,
@@ -445,11 +485,22 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 				}
 				// images (not citations)
 				for _, im := range c.Images {
+					// Dedupe images by OriginURL if present, else ImageURL
+					ikey := im.OriginURL
+					if strings.TrimSpace(ikey) == "" {
+						ikey = im.ImageURL
+					}
+					ikey = normalize(ikey)
+					if _, dup := seenImage[ikey]; dup {
+						seq++
+						continue
+					}
+					seenImage[ikey] = struct{}{}
 					combined_global = append(combined_global, importModel.CombinedItem{
 						SeqNo:      seq,
 						IsCitation: false,
 						Kind:       "image",
-						Payload: importModel.ImageItem{
+						Payload: &importModel.ImageItem{
 							ImageURL:   im.ImageURL,
 							OriginURL:  im.OriginURL,
 							Height:     im.Height,
@@ -465,6 +516,16 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 				}
 				// videos (not citations)
 				for _, v := range c.Videos {
+					// Skip YouTube channel and shorts URLs
+					if strings.Contains(v.URL, "/channel/") || strings.Contains(v.URL, "/shorts/") {
+						continue
+					}
+					key := normalize(v.URL)
+					if _, dup := seenVideo[key]; dup {
+						seq++
+						continue
+					}
+					seenVideo[key] = struct{}{}
 					combined_global = append(combined_global, importModel.CombinedItem{
 						SeqNo:      seq,
 						IsCitation: false,
@@ -496,35 +557,161 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 				//combined_global = combined_global
 				// Print combined list once (pretty printed for readability)
 				if b, err := json.MarshalIndent(combined_global, "", "  "); err == nil {
-					fmt.Printf("combined_list:\n%s\n", string(b))
+					//fmt.Printf("combined_list:\n%s\n", string(b))
 					if search_id_list != "" {
 						sendToClient(search_id_list, string(b)+search_id_list+"\n")
 					}
 				}
-				// first socket can be initiated here to send data to extractors (non-blocking)
+				// first socket can be inistiated here to send data to extractors (non-blocking)
 				// Enrich YouTube video items asynchronously via ScrapingDog
 
 				for i := range combined_global {
-					v, ok := combined_global[i].Payload.(importModel.VideoItem)
-					if !ok {
-						continue
-					}
-					if v.URL == "" || !(strings.Contains(v.URL, "youtube.com") || strings.Contains(v.URL, "youtu.be")) {
-						continue
-					}
+					// v, ok := combined_global[i].Payload.(importModel.VideoItem)
+					// if !ok {
+					// 	continue
+					// }
+					// if v.URL == "" || !(strings.Contains(v.URL, "youtube.com") || strings.Contains(v.URL, "youtu.be")) {
+					// 	continue
+					// }
 					idx := i
-					urlStr := v.URL
+					urlStr := ""
+					if combined_global[idx].Kind == "web" {
+						switch p := combined_global[idx].Payload.(type) {
+						case importModel.WebItem:
+							urlStr = p.URL
+						case *importModel.WebItem:
+							if p != nil {
+								urlStr = p.URL
+							}
+						}
+					} else if combined_global[idx].Kind == "image" {
+						if p, ok := combined_global[idx].Payload.(*importModel.ImageItem); ok && p != nil {
+							urlStr = p.ImageURL
+						}
+					} else if combined_global[idx].Kind == "video" {
+						if p, ok := combined_global[idx].Payload.(importModel.VideoItem); ok {
+							urlStr = p.URL
+						}
+					}
+
 					if combined_global[idx].Kind == "related" {
 						continue
 					}
-					if combined_global[idx].Kind == "image" || combined_global[idx].Kind == "web" {
+					if combined_global[idx].Kind == "image" {
 						wg.Add(1)
 						go func() {
 							defer wg.Done()
-							fmt.Println("Processing image:", combined_global[idx].SeqNo)
-							time.Sleep(500 * time.Millisecond)
+							p, ok := combined_global[idx].Payload.(*importModel.ImageItem)
+							if !ok || p == nil {
+								return
+							}
+							data, err := ExtractMetadata(urlStr)
+							if err != nil {
+								fmt.Printf("ExtractMetadata error for seq_no=%d url=%s: %v\n", combined_global[idx].SeqNo, urlStr, err)
+							}
+							snippet := ""
+							favicon := ""
+							if err == nil && data != nil {
+								snippet = data.Description
+								favicon = data.Favicon
+							}
+							newPayload := importModel.ImageItem{
+								ImageURL:   p.ImageURL,
+								OriginURL:  p.OriginURL,
+								Height:     p.Height,
+								Width:      p.Width,
+								Title:      p.Title,
+								Snippet:    snippet,
+								Favicon:    favicon,
+								Source:     p.Source,
+								AIOverview: p.AIOverview,
+							}
+							// if b, err := json.MarshalIndent(importModel.CombinedItem{
+							// 	SeqNo:      combined_global[idx].SeqNo,
+							// 	IsCitation: combined_global[idx].IsCitation,
+							// 	Kind:       "image",
+							// 	Payload:    newPayload,
+							// }, "", "  "); err == nil {
+							// 	fmt.Printf("enriched_image_item:\n%s\n", string(b))
+							// }
+							if search_id_list != "" {
+								if b, err := json.Marshal(importModel.CombinedItem{
+									SeqNo:      combined_global[idx].SeqNo,
+									IsCitation: combined_global[idx].IsCitation,
+									Kind:       "image",
+									Payload:    newPayload,
+								}); err == nil {
+									combined_global[idx].Payload = newPayload
+									sendToClient(search_id_list, string(b)+search_id_list+"\n")
+								}
+							}
+						}()
+						continue
+					}
+					if combined_global[idx].Kind == "web" {
+						wg.Add(1)
+						go func() {
+							defer wg.Done()
+							//call the web_image_extractor
+							data, err := ExtractMetadata(urlStr)
+							if err != nil {
+								fmt.Printf("ExtractMetadata error for seq_no=%d url=%s: %v\n", combined_global[idx].SeqNo, urlStr, err)
+							}
+							var current importModel.WebItem
+							switch p := combined_global[idx].Payload.(type) {
+							case importModel.WebItem:
+								current = p
+							case *importModel.WebItem:
+								if p == nil {
+									return
+								}
+								current = *p
+							default:
+								return
+							}
+							// derive fields safely from extractor result
+							newSnippet := current.Snippet
+							newFavicon := current.Favicon
+							if err == nil && data != nil {
+								if strings.TrimSpace(data.Description) != "" {
+									newSnippet = data.Description
+								}
+								if strings.TrimSpace(data.Favicon) != "" {
+									newFavicon = data.Favicon
+								}
+							}
+							newPayload := importModel.WebItem{
+								Title:       current.Title,
+								URL:         current.URL,
+								Date:        current.Date,
+								LastUpdated: current.LastUpdated,
+								Snippet:     newSnippet,
+								Source:      current.Source,
+								Favicon:     newFavicon,
+								AIOverview:  current.AIOverview,
+							}
+							// if b, err := json.MarshalIndent(importModel.CombinedItem{
+							// 	SeqNo:      combined_global[idx].SeqNo,
+							// 	IsCitation: combined_global[idx].IsCitation,
+							// 	Kind:       "web",
+							// 	Payload:    newPayload,
+							// }, "", "  "); err == nil {
+							// 	fmt.Printf("enriched_web_item:\n%s\n", string(b))
+							// }
+							if search_id_list != "" {
+								if b, err := json.Marshal(importModel.CombinedItem{
+									SeqNo:      combined_global[idx].SeqNo,
+									IsCitation: combined_global[idx].IsCitation,
+									Kind:       "web",
+									Payload:    newPayload,
+								}); err == nil {
+									combined_global[idx].Payload = newPayload
+									sendToClient(search_id_list, string(b)+search_id_list+"\n")
+								}
+							}
 
 						}()
+						continue
 					}
 					// Enrich all items whose type is video, regardless of citation flag
 					// if combined_global[i].Kind != "video" {
@@ -550,29 +737,30 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 
 							if err == nil {
 								enr := BuildEnrichment(sd)
+								// Mirror image/web assignment: take fallbacks from combined_global[idx]
+								current := combined_global[idx].Payload.(importModel.VideoItem)
 								newPayload := importModel.VideoItem{
-									VideoID:         chooseString(enr.VideoID, v.VideoID),
-									URL:             v.URL,
-									ThumbnailWidth:  chooseInt(enr.ThumbnailWidth, v.ThumbnailWidth),
-									ThumbnailHeight: chooseInt(enr.ThumbnailHeight, v.ThumbnailHeight),
-									ThumbnailURL:    chooseString(enr.ThumbnailURL, v.ThumbnailURL),
-									Title:           chooseString(enr.Title, v.Title),
-									//Thumbnail:       v.ThumbnailURL,
-									PublishDate: chooseString(enr.PublishDate, v.PublishDate),
-									Likes:       chooseInt(enr.Likes, v.Likes),
-									Views:       chooseInt(enr.Views, v.Views),
-									Description: chooseString(enr.Description, v.Description),
+									VideoID:         chooseString(enr.VideoID, current.VideoID),
+									URL:             current.URL,
+									ThumbnailWidth:  chooseInt(enr.ThumbnailWidth, current.ThumbnailWidth),
+									ThumbnailHeight: chooseInt(enr.ThumbnailHeight, current.ThumbnailHeight),
+									ThumbnailURL:    chooseString(enr.ThumbnailURL, current.ThumbnailURL),
+									Title:           chooseString(enr.Title, current.Title),
+									PublishDate:     chooseString(enr.PublishDate, current.PublishDate),
+									Likes:           chooseInt(enr.Likes, current.Likes),
+									Views:           chooseInt(enr.Views, current.Views),
+									Description:     chooseString(enr.Description, current.Description),
 								}
-								if b, err := json.MarshalIndent(videoUpdate{
-									SeqNo:      combined_global[idx].SeqNo,
-									IsCitation: combined_global[idx].IsCitation,
-									Kind:       "video",
-									Payload:    newPayload,
-								}, "", "  "); err == nil {
-									fmt.Printf("enriched_video_item:\n%s\n", string(b))
-								}
+								// if b, err := json.MarshalIndent(importModel.CombinedItem{
+								// 	SeqNo:      combined_global[idx].SeqNo,
+								// 	IsCitation: combined_global[idx].IsCitation,
+								// 	Kind:       "video",
+								// 	Payload:    newPayload,
+								// }, "", "  "); err == nil {
+								// 	fmt.Printf("enriched_video_item:\n%s\n", string(b))
+								// }
 								if search_id_list != "" {
-									if b, err := json.Marshal(videoUpdate{
+									if b, err := json.Marshal(importModel.CombinedItem{
 										SeqNo:      combined_global[idx].SeqNo,
 										IsCitation: combined_global[idx].IsCitation,
 										Kind:       "video",
@@ -586,6 +774,34 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 								}
 							} else {
 								fmt.Printf("ScrapingDog error for seq_no=%d url=%s: %v\n", combined_global[idx].SeqNo, urlStr, err)
+								// On repeated failure, send a fallback update marking not processed
+								if search_id_list != "" {
+									if current, ok := combined_global[idx].Payload.(importModel.VideoItem); ok {
+										fallback := importModel.VideoItem{
+											VideoID:         current.VideoID,
+											URL:             current.URL,
+											ThumbnailWidth:  current.ThumbnailWidth,
+											ThumbnailHeight: current.ThumbnailHeight,
+											ThumbnailURL:    current.ThumbnailURL,
+											Title:           current.Title,
+											PublishDate:     current.PublishDate,
+											Likes:           current.Likes,
+											Views:           current.Views,
+											Description:     current.Description,
+											IsNotProcessed:  true,
+										}
+										if b, err := json.Marshal(importModel.CombinedItem{
+											SeqNo:      combined_global[idx].SeqNo,
+											IsCitation: combined_global[idx].IsCitation,
+											Kind:       "video",
+											Payload:    fallback,
+										}); err == nil {
+											combined_global[idx].Payload = fallback
+											sendToClient(search_id_list, string(b)+search_id_list+"\n")
+										}
+									}
+								}
+
 							}
 						}
 					}()
@@ -614,11 +830,11 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 					"finish_reason": "stop",
 					"ts":            time.Now().UnixMilli(),
 				})
-				if lastNonEmptyContent != "" {
-					fmt.Printf("🧩 Last content chunk for %s: %q\n", search_id_ai_summary, lastNonEmptyContent)
-				} else {
-					fmt.Printf("🧩 No non-empty content captured for %s before stop\n", search_id_ai_summary)
-				}
+				// if lastNonEmptyContent != "" {
+				// 	fmt.Printf("🧩 Last content chunk for %s: %q\n", search_id_ai_summary, lastNonEmptyContent)
+				// } else {
+				// 	fmt.Printf("🧩 No non-empty content captured for %s before stop\n", search_id_ai_summary)
+				// }
 				//waiting for the lists to be enriched with the json coming from the extractors
 				wg.Wait()
 				//Print combined list once more at stop using the latest snapshot
@@ -628,7 +844,7 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 				// 	// 	sendToClient(search_id_list, string(b)+"\n")
 				// 	// }
 				// }
-				//sending the list to the extractor api
+				//sending the list to the ytdl extractor
 				go func() {
 					ProcessVideoExtraction(combined_global, searchRecord, platoform)
 				}()
@@ -650,7 +866,8 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 							seq := item.SeqNo
 							switch item.Kind {
 							case "video":
-								if v, ok := item.Payload.(importModel.VideoItem); ok {
+								switch v := item.Payload.(type) {
+								case importModel.VideoItem:
 									vid, err := database.InsertVideoURL(ctx, pool, sr.ResponseID, item.IsCitation, &seq)
 									if err != nil {
 										fmt.Printf("db: insert video_urls failed: %v\n", err)
@@ -667,24 +884,75 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 									if err := database.InsertVideoMetadata(ctx, pool, vid, vm); err != nil {
 										fmt.Printf("db: insert video_metadata failed: %v\n", err)
 									}
+								case *importModel.VideoItem:
+									if v == nil {
+										fmt.Printf("db: skip video nil payload at seq=%d\n", seq)
+										continue
+									}
+									vid, err := database.InsertVideoURL(ctx, pool, sr.ResponseID, item.IsCitation, &seq)
+									if err != nil {
+										fmt.Printf("db: insert video_urls failed: %v\n", err)
+										continue
+									}
+									url := v.URL
+									title := v.Title
+									thumb := v.ThumbnailURL
+									pub := database.ParseDatePtr(v.PublishDate)
+									likes := int64(v.Likes)
+									views := int64(v.Views)
+									desc := v.Description
+									vm := importModel.VideoMetadata{VideoID: vid, VideoURL: &url, Title: &title, Thumbnail: &thumb, PublishDate: pub, Likes: &likes, Views: &views, Description: &desc}
+									if err := database.InsertVideoMetadata(ctx, pool, vid, vm); err != nil {
+										fmt.Printf("db: insert video_metadata failed: %v\n", err)
+									}
+								default:
+									// unsupported payload shape
 								}
 							case "web":
-								if witem, ok := item.Payload.(importModel.WebItem); ok {
-									if err := database.InsertWebURL(ctx, pool, sr.ResponseID, witem.URL, item.IsCitation, &seq); err != nil {
+								switch w := item.Payload.(type) {
+								case importModel.WebItem:
+									if err := database.InsertWebURL(ctx, pool, sr.ResponseID, w.URL, item.IsCitation, &seq); err != nil {
 										fmt.Printf("db: insert web_urls failed: %v\n", err)
 									}
-									if err := database.InsertWebMetadata(ctx, pool, witem); err != nil {
+									if err := database.InsertWebMetadata(ctx, pool, w); err != nil {
 										fmt.Printf("db: insert web_metadata failed: %v\n", err)
 									}
+								case *importModel.WebItem:
+									if w == nil {
+										fmt.Printf("db: skip web nil payload at seq=%d\n", seq)
+										continue
+									}
+									if err := database.InsertWebURL(ctx, pool, sr.ResponseID, w.URL, item.IsCitation, &seq); err != nil {
+										fmt.Printf("db: insert web_urls failed: %v\n", err)
+									}
+									if err := database.InsertWebMetadata(ctx, pool, *w); err != nil {
+										fmt.Printf("db: insert web_metadata failed: %v\n", err)
+									}
+								default:
+									// unsupported payload shape
 								}
 							case "image":
-								if im, ok := item.Payload.(importModel.ImageItem); ok {
+								switch im := item.Payload.(type) {
+								case importModel.ImageItem:
 									if err := database.InsertImageURL(ctx, pool, sr.ResponseID, im.OriginURL, item.IsCitation, &seq); err != nil {
 										fmt.Printf("db: insert image_urls failed: %v\n", err)
 									}
 									if err := database.InsertImageMetadata(ctx, pool, im); err != nil {
 										fmt.Printf("db: insert image_metadata failed: %v\n", err)
 									}
+								case *importModel.ImageItem:
+									if im == nil {
+										fmt.Printf("db: skip image nil payload at seq=%d\n", seq)
+										continue
+									}
+									if err := database.InsertImageURL(ctx, pool, sr.ResponseID, im.OriginURL, item.IsCitation, &seq); err != nil {
+										fmt.Printf("db: insert image_urls failed: %v\n", err)
+									}
+									if err := database.InsertImageMetadata(ctx, pool, *im); err != nil {
+										fmt.Printf("db: insert image_metadata failed: %v\n", err)
+									}
+								default:
+									// unsupported payload shape
 								}
 							}
 						}

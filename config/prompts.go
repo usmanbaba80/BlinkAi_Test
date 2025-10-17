@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 
 	"github.com/InvicttusGIT/BlinkAi_SearchEngineApps_Productivity_Backend/database"
@@ -14,7 +15,7 @@ import (
 // PromptsConfig holds the loaded system prompts
 type PromptsConfig struct {
 	mu      sync.RWMutex
-	prompts map[string]models.PromptData // key: search_type, value: PromptData
+	prompts map[string][]models.PromptData // key: search_type, value: PromptData
 }
 
 // Global instance
@@ -23,7 +24,7 @@ var SystemPrompts *PromptsConfig
 // NewPromptsConfig creates a new PromptsConfig instance
 func NewPromptsConfig() *PromptsConfig {
 	return &PromptsConfig{
-		prompts: make(map[string]models.PromptData),
+		prompts: make(map[string][]models.PromptData),
 	}
 }
 
@@ -51,35 +52,50 @@ func (pc *PromptsConfig) LoadPrompts(ctx context.Context, pool *pgxpool.Pool) er
 }
 
 // GetPrompt retrieves a prompt by search type
-func (pc *PromptsConfig) GetPrompt(searchType string) (models.PromptData, bool) {
+func (pc *PromptsConfig) GetPrompt(searchType string, platformName string) (models.PromptData, bool) {
 	pc.mu.RLock()
 	defer pc.mu.RUnlock()
 
-	// Try to get the specific search type
-	if prompt, exists := pc.prompts[searchType]; exists {
-		return prompt, true
+	platformLower := strings.ToLower(strings.TrimSpace(platformName))
+
+	// Try to get prompts for the specific search type
+	if promptsForType, exists := pc.prompts[searchType]; exists {
+		// 1) Exact (case-insensitive) platform match
+		for _, p := range promptsForType {
+			if strings.ToLower(strings.TrimSpace(p.Platform)) == platformLower {
+				return p, true
+			}
+		}
+		// 2) Fallback to platform-agnostic entry within same search type (empty platform)
+		for _, p := range promptsForType {
+			if strings.TrimSpace(p.Platform) == "" {
+				return p, true
+			}
+		}
 	}
 
-	// Fallback to default if specific type not found
-	if prompt, exists := pc.prompts["default"]; exists {
-		return prompt, true
+	// 3) Global default fallback (ensure slice non-empty)
+	if defaults, exists := pc.prompts["default"]; exists {
+		if len(defaults) > 0 {
+			return defaults[0], true
+		}
 	}
 
 	return models.PromptData{}, false
 }
 
-// GetAllPrompts returns a copy of all loaded prompts
-func (pc *PromptsConfig) GetAllPrompts() map[string]models.PromptData {
-	pc.mu.RLock()
-	defer pc.mu.RUnlock()
+// // GetAllPrompts returns a copy of all loaded prompts
+// func (pc *PromptsConfig) GetAllPrompts() map[string]models.PromptData {
+// 	pc.mu.RLock()
+// 	defer pc.mu.RUnlock()
 
-	// Create a copy to avoid race conditions
-	prompts := make(map[string]models.PromptData)
-	for k, v := range pc.prompts {
-		prompts[k] = v
-	}
-	return prompts
-}
+// 	// Create a copy to avoid race conditions
+// 	prompts := make(map[string][]models.PromptData)
+// 	for k, v := range pc.prompts {
+// 		prompts[k] = v
+// 	}
+// 	return prompts
+// }
 
 // ReloadPrompts reloads prompts from the database
 func (pc *PromptsConfig) ReloadPrompts(ctx context.Context, pool *pgxpool.Pool) error {

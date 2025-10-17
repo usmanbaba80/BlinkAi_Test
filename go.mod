@@ -3,6 +3,7 @@ module github.com/InvicttusGIT/BlinkAi_SearchEngineApps_Productivity_Backend
 go 1.24.5
 
 require (
+	github.com/PuerkitoBio/goquery v1.10.3
 	github.com/go-playground/validator/v10 v10.27.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgtype v1.14.4
@@ -12,6 +13,7 @@ require (
 )
 
 require (
+	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.8 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect

@@ -20,7 +20,7 @@ func callExtractorAPI(apiURL string, requestBody map[string]interface{}) error {
 	if apiKey == "" {
 		return fmt.Errorf("Youtube_Video_playable_API environment variable not set")
 	}
-	fmt.Print("sending batch request to the extractor api")
+	fmt.Print("sending batch request to the ytdl extractor")
 
 	// Marshal request body to JSON
 	jsonBody, err := json.Marshal(requestBody)
@@ -163,7 +163,7 @@ func callExtractorAPI(apiURL string, requestBody map[string]interface{}) error {
 
 	// Final summary for easy visibility in logs
 	if finalMessage != "" || totalProcessed > 0 {
-		fmt.Printf("extractor_complete: {\"search_id\":\"%s\", \"message\":\"%s\", \"total_processed\":%d, \"successful\":%d, \"failed\":%d}\n", finalSearchID, finalMessage, totalProcessed, totalSuccessful, totalFailed)
+		fmt.Printf("ytdl_extractor_complete: {\"search_id\":\"%s\", \"message\":\"%s\", \"total_processed\":%d, \"successful\":%d, \"failed\":%d}\n", finalSearchID, finalMessage, totalProcessed, totalSuccessful, totalFailed)
 	}
 	if len(failedURLs) > 0 {
 		fmt.Println("extractor_failed_urls:")
@@ -213,6 +213,6 @@ func ProcessVideoExtraction(combinedItems []importModel.CombinedItem, searchReco
 	if err := callExtractorAPI(apiURL, requestBody); err != nil {
 		fmt.Printf("Failed to call extractor API: %v\n", err)
 	} else {
-		fmt.Printf("Successfully sent %d video URLs to %s extractor API\n", len(videoURLs), platform)
+		fmt.Printf("Successfully sent %d video URLs to %s ytdl extractor API\n", len(videoURLs), platform)
 	}
 }

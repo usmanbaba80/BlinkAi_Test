@@ -40,10 +40,11 @@ type VideoItem struct {
 	ThumbnailURL    string `json:"thumbnail_url"`
 	Title           string `json:"title"`
 	//Thumbnail       string `json:"thumbnail"`
-	PublishDate string `json:"publish_date"`
-	Likes       int    `json:"likes"`
-	Views       int    `json:"views"`
-	Description string `json:"description"`
+	PublishDate    string `json:"publish_date"`
+	Likes          int    `json:"likes"`
+	Views          int    `json:"views"`
+	Description    string `json:"description"`
+	IsNotProcessed bool   `json:"is_not_processed"`
 }
 
 // RelatedList represents all related searches grouped into a single item

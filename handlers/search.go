@@ -58,7 +58,7 @@ func SearchHandler(pool *pgxpool.Pool) echo.HandlerFunc {
 		}
 
 		// Get the system prompt for this search type (in-memory, very fast)
-		promptData, promptFound := config.SystemPrompts.GetPrompt(req.SearchType)
+		promptData, promptFound := config.SystemPrompts.GetPrompt(req.SearchType, req.PlatformName)
 
 		// Store the search request in the database
 		var systemPromptID string
@@ -92,9 +92,9 @@ func SearchHandler(pool *pgxpool.Pool) echo.HandlerFunc {
 					"overrides": map[string]any{"return_videos": true, "return_images": true},
 				},
 				ReturnRelatedQuestions: true,
-				SearchDomainFilter:     []string{"youtube.com"},
-				Temperature:            0.1,
-				MaxSearchResults:       10,
+				//SearchDomainFilter:     []string{"youtube.com"},
+				Temperature:      0.1,
+				MaxSearchResults: 10,
 			}
 			// Background processing via module helper
 			go modules.StartBackgroundPerplexity(context.Background(), modules.MustGetPerplexityKey(), pReq, 90*time.Second, searchRecord.SearchID.String()+"_ai_summary", searchRecord.SearchID.String()+"_list", searchRecord, pool, req.PlatformName, func(object, content string) {
@@ -112,8 +112,8 @@ func SearchHandler(pool *pgxpool.Pool) echo.HandlerFunc {
 					"overrides": map[string]any{"return_videos": true, "return_images": true},
 				},
 				ReturnRelatedQuestions: true,
-				//SearchDomainFilter:     []string{"youtube.com"},
-				Temperature: 0.2,
+				SearchDomainFilter:     []string{"youtube.com"},
+				Temperature:            0.2,
 			}
 			// Background processing via module helper
 			go modules.StartBackgroundPerplexity(context.Background(), modules.MustGetPerplexityKey(), pReq, 90*time.Second, searchRecord.SearchID.String()+"_ai_summary", searchRecord.SearchID.String()+"_list", searchRecord, pool, req.PlatformName, func(object, content string) {

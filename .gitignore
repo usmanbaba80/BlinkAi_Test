@@ -2,4 +2,5 @@ BlinkAi.sql
 BlinkAI_queries.sql
 tests/
 .env
+ai_content/
 

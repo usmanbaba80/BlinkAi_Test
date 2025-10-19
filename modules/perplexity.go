@@ -586,7 +586,7 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 						}
 					} else if combined_global[idx].Kind == "image" {
 						if p, ok := combined_global[idx].Payload.(*importModel.ImageItem); ok && p != nil {
-							urlStr = p.ImageURL
+							urlStr = p.OriginURL
 						}
 					} else if combined_global[idx].Kind == "video" {
 						if p, ok := combined_global[idx].Payload.(importModel.VideoItem); ok {
@@ -608,12 +608,14 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 							data, err := ExtractMetadata(urlStr)
 							if err != nil {
 								fmt.Printf("ExtractMetadata error for seq_no=%d url=%s: %v\n", combined_global[idx].SeqNo, urlStr, err)
+								fmt.Println("error from web/image scrapper")
 							}
 							snippet := ""
-							favicon := ""
+							favicon := fmt.Sprintf("https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=%s&size=32", urlStr)
 							if err == nil && data != nil {
 								snippet = data.Description
 								favicon = data.Favicon
+								//fmt.Println("image favicon-->", favicon)
 							}
 							newPayload := importModel.ImageItem{
 								ImageURL:   p.ImageURL,
@@ -656,6 +658,7 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 							data, err := ExtractMetadata(urlStr)
 							if err != nil {
 								fmt.Printf("ExtractMetadata error for seq_no=%d url=%s: %v\n", combined_global[idx].SeqNo, urlStr, err)
+								fmt.Println("error from web/image scrapper")
 							}
 							var current importModel.WebItem
 							switch p := combined_global[idx].Payload.(type) {
@@ -671,13 +674,14 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 							}
 							// derive fields safely from extractor result
 							newSnippet := current.Snippet
-							newFavicon := current.Favicon
+							newFavicon := fmt.Sprintf("https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=%s&size=32", urlStr)
 							if err == nil && data != nil {
 								if strings.TrimSpace(data.Description) != "" {
 									newSnippet = data.Description
 								}
 								if strings.TrimSpace(data.Favicon) != "" {
 									newFavicon = data.Favicon
+									//fmt.Println("web favicon-->", newFavicon)
 								}
 							}
 							newPayload := importModel.WebItem{
@@ -830,6 +834,8 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 					"finish_reason": "stop",
 					"ts":            time.Now().UnixMilli(),
 				})
+				time.Sleep(1 * time.Second)
+				sendToClient(search_id_ai_summary, content+search_id_ai_summary+"\n")
 				// if lastNonEmptyContent != "" {
 				// 	fmt.Printf("🧩 Last content chunk for %s: %q\n", search_id_ai_summary, lastNonEmptyContent)
 				// } else {

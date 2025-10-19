@@ -12,6 +12,9 @@ import (
 
 var httpClient = &http.Client{
 	Timeout: 8 * time.Second,
+	Transport: &http.Transport{
+		ForceAttemptHTTP2: false, // Force HTTP/1.1
+	},
 	CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 5 {
 			return http.ErrUseLastResponse
@@ -54,7 +57,9 @@ func ExtractMetadata(url string) (*models.Web_Image_MetaData, error) {
 		data.Favicon = resolveURL(url, shortcut)
 	} else {
 		data.Favicon = fmt.Sprintf("https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=%s&size=32", url)
+		fmt.Println("hitting our default scrapper-->", data.Favicon)
 	}
+	//fmt.Println("data.Favicon-->", data.Favicon)
 	return data, nil
 }
 

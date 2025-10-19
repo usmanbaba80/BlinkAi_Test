@@ -611,9 +611,11 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 								fmt.Println("error from web/image scrapper")
 							}
 							snippet := ""
+							websource := webSourceFromUrl(urlStr)
 							//favicon := fmt.Sprintf("https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=%s&size=32", urlStr)
 							if err == nil && data != nil {
 								snippet = data.Description
+								websource = data.WebSource
 								//favicon = data.Favicon
 								//fmt.Println("image favicon-->", favicon)
 							}
@@ -625,10 +627,10 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 								Title:     p.Title,
 								Snippet:   snippet,
 								//Favicon:    favicon,
-								Favicon: fmt.Sprintf("https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=%s&size=32", urlStr),
-
+								Favicon:    fmt.Sprintf("https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=%s&size=32", urlStr),
 								Source:     p.Source,
 								AIOverview: p.AIOverview,
+								WebSource:  websource,
 							}
 							// if b, err := json.MarshalIndent(importModel.CombinedItem{
 							// 	SeqNo:      combined_global[idx].SeqNo,
@@ -676,11 +678,13 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 							}
 							// derive fields safely from extractor result
 							newSnippet := current.Snippet
+							websource := webSourceFromUrl(urlStr)
 							//newFavicon := fmt.Sprintf("https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=%s&size=32", urlStr)
 							if err == nil && data != nil {
 								if strings.TrimSpace(data.Description) != "" {
 									newSnippet = data.Description
 								}
+								websource = data.WebSource
 								// if strings.TrimSpace(data.Favicon) != "" {
 								// 	newFavicon = data.Favicon
 								// 	//fmt.Println("web favicon-->", newFavicon)
@@ -696,6 +700,7 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 								//Favicon:     newFavicon,
 								Favicon:    fmt.Sprintf("https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=%s&size=32", urlStr),
 								AIOverview: current.AIOverview,
+								WebSource:  websource,
 							}
 							// if b, err := json.MarshalIndent(importModel.CombinedItem{
 							// 	SeqNo:      combined_global[idx].SeqNo,

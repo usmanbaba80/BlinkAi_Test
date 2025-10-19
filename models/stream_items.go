@@ -18,6 +18,7 @@ type WebItem struct {
 	Snippet     string  `json:"snippet"`
 	Source      string  `json:"source"`
 	Favicon     string  `json:"favicon"`
+	WebSource   string  `json:"web_source"`
 }
 
 type ImageItem struct {
@@ -30,6 +31,7 @@ type ImageItem struct {
 	Snippet    string `json:"snippet"`
 	Favicon    string `json:"favicon"`
 	Source     string `json:"source"`
+	WebSource  string `json:"web_source"`
 }
 
 type VideoItem struct {

@@ -77,16 +77,22 @@ func InsertWebURL(ctx context.Context, pool *pgxpool.Pool, responseID uuid.UUID,
 // InsertWebMetadata inserts into web_metadata
 func InsertWebMetadata(ctx context.Context, pool *pgxpool.Pool, meta model.WebItem) error {
 	query := `
-        INSERT INTO web_metadata (url, ai_overview, snippet_description, title, favicon, source)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO web_metadata (url, ai_overview, snippet_description, title, favicon, source, web_source)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         ON CONFLICT (url) DO UPDATE SET
             ai_overview = EXCLUDED.ai_overview,
             snippet_description = EXCLUDED.snippet_description,
             title = EXCLUDED.title,
             favicon = EXCLUDED.favicon,
-            source = EXCLUDED.source
+            source = EXCLUDED.source,
+			web_source = EXCLUDED.web_source
     `
 	// Map WebItem to metadata schema
+	var websource *string
+	if meta.WebSource != "" {
+		t := meta.WebSource
+		websource = &t
+	}
 	var snippet *string
 	if meta.Snippet != "" {
 		t := meta.Snippet
@@ -112,7 +118,7 @@ func InsertWebMetadata(ctx context.Context, pool *pgxpool.Pool, meta model.WebIt
 		t := meta.Source
 		source = &t
 	}
-	if _, err := pool.Exec(ctx, query, meta.URL, ai, snippet, title, favicon, source); err != nil {
+	if _, err := pool.Exec(ctx, query, meta.URL, ai, snippet, title, favicon, source, websource); err != nil {
 		return fmt.Errorf("insert web_metadata: %w", err)
 	}
 	return nil
@@ -137,16 +143,23 @@ func InsertImageURL(ctx context.Context, pool *pgxpool.Pool, responseID uuid.UUI
 // InsertImageMetadata inserts into image_metadata
 func InsertImageMetadata(ctx context.Context, pool *pgxpool.Pool, meta model.ImageItem) error {
 	query := `
-        INSERT INTO image_metadata (url, url_image, ai_overview, snippet_description, title, favicon, source)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        INSERT INTO image_metadata (url, url_image, ai_overview, snippet_description, title, favicon, source, web_source)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         ON CONFLICT (url) DO UPDATE SET
             url_image = EXCLUDED.url_image,
             ai_overview = EXCLUDED.ai_overview,
             snippet_description = EXCLUDED.snippet_description,
             title = EXCLUDED.title,
             favicon = EXCLUDED.favicon,
-            source = EXCLUDED.source
+            source = EXCLUDED.source,
+			web_source = EXCLUDED.web_source
+
     `
+	var webSource *string
+	if meta.WebSource != "" {
+		t := meta.WebSource
+		webSource = &t
+	}
 	var urlImage *string
 	if meta.ImageURL != "" {
 		t := meta.ImageURL
@@ -177,7 +190,7 @@ func InsertImageMetadata(ctx context.Context, pool *pgxpool.Pool, meta model.Ima
 		t := meta.Source
 		source = &t
 	}
-	if _, err := pool.Exec(ctx, query, meta.OriginURL, urlImage, ai, snippet, title, favicon, source); err != nil {
+	if _, err := pool.Exec(ctx, query, meta.OriginURL, urlImage, ai, snippet, title, favicon, source, webSource); err != nil {
 		return fmt.Errorf("insert image_metadata: %w", err)
 	}
 	return nil

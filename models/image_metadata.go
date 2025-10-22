@@ -8,4 +8,5 @@ type ImageMetadata struct {
 	Title              *string `db:"title" json:"title"`
 	Favicon            *string `db:"favicon" json:"favicon"`
 	Source             *string `db:"source" json:"source"`
+	WebSource          *string `db:"web_source" json:"web_source"`
 }

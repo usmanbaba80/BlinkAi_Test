@@ -149,6 +149,7 @@ type ClientConnection struct {
 	MsgCh    chan string
 	mu       sync.Mutex
 	closed   bool
+	done     chan struct{}
 }
 
 var (
@@ -200,6 +201,7 @@ func handleClient(conn net.Conn) {
 		SearchID: searchID,
 		Conn:     conn,
 		MsgCh:    make(chan string, 100),
+		done:     make(chan struct{}),
 	}
 
 	clientRegistryLock.Lock()
@@ -207,29 +209,107 @@ func handleClient(conn net.Conn) {
 	clientRegistryLock.Unlock()
 
 	go streamToClient(client)
-
-	select {} // Keep the goroutine alive
+	// Wait until the streaming goroutine ends (client disconnected or explicitly closed)
+	<-client.done
 }
 
 func streamToClient(client *ClientConnection) {
+	// Signal completion to the owner when this function returns
+	defer func() {
+		client.mu.Lock()
+		// ensure done is closed exactly once
+		select {
+		case <-client.done:
+			// already closed
+		default:
+			close(client.done)
+		}
+		client.mu.Unlock()
+	}()
+
+	messageCount := 0
+	startTime := time.Now()
 
 	for msg := range client.MsgCh {
-		// if len(client.MsgCh) == cap(client.MsgCh) {
-		// 	fmt.Printf("list socket backlog full for %s: %d/%d; dropping newest\n", client.SearchID, len(client.MsgCh), cap(client.MsgCh))
-		// }
-		// fmt.Printf("queue depth for %s: %d/%d\n", client.SearchID, len(client.MsgCh), cap(client.MsgCh))
+		messageCount++
 
-		// Debug print suppressed
+		// Enhanced error logging with detailed context
 		_, err := client.Conn.Write([]byte(msg))
 		if err != nil {
-			fmt.Println("❌ Write error for", client.SearchID, ":", err)
+			// Categorize the error type for better debugging
+			errorType := categorizeWriteError(err)
+			msgPreview := getMessagePreview(msg)
+
+			fmt.Printf("❌ WRITE ERROR [%s] | Type: %s | Messages: %d | Duration: %v | Preview: %s | Error: %v\n",
+				client.SearchID, errorType, messageCount, time.Since(startTime), msgPreview, err)
+
+			// Log connection state for debugging
+			logConnectionState(client, err)
 			break
 		}
 	}
+
 	clientRegistryLock.Lock()
 	delete(clientRegistry, client.SearchID)
 	clientRegistryLock.Unlock()
-	fmt.Println("🔌 Client disconnected:", client.SearchID)
+	fmt.Printf("🔌 CLIENT DISCONNECTED [%s] | Total Messages: %d | Duration: %v\n",
+		client.SearchID, messageCount, time.Since(startTime))
+}
+
+// categorizeWriteError determines the type of write error for better debugging
+func categorizeWriteError(err error) string {
+	if err == nil {
+		return "NONE"
+	}
+	errStr := strings.ToLower(err.Error())
+
+	if strings.Contains(errStr, "use of closed network connection") {
+		return "CLIENT_DISCONNECTED"
+	}
+	if strings.Contains(errStr, "broken pipe") {
+		return "BROKEN_PIPE"
+	}
+	if strings.Contains(errStr, "connection reset") {
+		return "CONNECTION_RESET"
+	}
+	if strings.Contains(errStr, "timeout") {
+		return "TIMEOUT"
+	}
+	if strings.Contains(errStr, "no route to host") {
+		return "NETWORK_UNREACHABLE"
+	}
+	if strings.Contains(errStr, "connection refused") {
+		return "CONNECTION_REFUSED"
+	}
+	return "UNKNOWN"
+}
+
+// getMessagePreview returns a safe preview of the message for logging
+func getMessagePreview(msg string) string {
+	if len(msg) == 0 {
+		return "[EMPTY]"
+	}
+	// Truncate long messages and escape newlines
+	preview := strings.ReplaceAll(msg, "\n", "\\n")
+	if len(preview) > 100 {
+		preview = preview[:100] + "..."
+	}
+	return preview
+}
+
+// logConnectionState logs additional connection debugging info
+func logConnectionState(client *ClientConnection, err error) {
+	// Check if connection is still alive
+	one := []byte{0}
+	client.Conn.SetWriteDeadline(time.Now().Add(1 * time.Second))
+	_, writeErr := client.Conn.Write(one)
+	client.Conn.SetWriteDeadline(time.Time{}) // Clear deadline
+
+	if writeErr != nil {
+		fmt.Printf("🔍 CONNECTION STATE [%s] | Write Test: FAILED | Error: %v\n", client.SearchID, writeErr)
+	} else {
+		fmt.Printf("🔍 CONNECTION STATE [%s] | Write Test: OK | Original Error: %v\n", client.SearchID, err)
+	}
 }
 
 func sendToClient(searchID, chunk string) {
@@ -359,7 +439,7 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 	}
 
 	_ = enc // keep for future expansions; currently not used directly
-	combined_global := make([]importModel.CombinedItem, 0, 30)
+	combined_global := make([]importModel.CombinedItem, 0, 40)
 	var wg sync.WaitGroup
 	firstListPrinted := false
 	lastNonEmptyContent := ""
@@ -430,12 +510,18 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 
 					isYouTube := strings.Contains(sr.URL, "youtube.com") || strings.Contains(sr.URL, "youtu.be")
 					if isYouTube {
+						//if we dont ++ the seq what if in ai summary it is pointing to the number
+
 						// Skip YouTube channel and shorts URLs
 						if strings.Contains(sr.URL, "/channel/") || strings.Contains(sr.URL, "/shorts/") {
+							seq++
+							fmt.Println("ignoring youtube channel or shorts url-->", sr.URL, "seq-->", seq)
 							continue
 						}
 						key := normalize(sr.URL)
 						if _, dup := seenVideo[key]; dup {
+							seq++
+							fmt.Println("ignoring duplicate youtube url-->", key, "seq-->", seq)
 							continue
 						}
 						seenVideo[key] = struct{}{}
@@ -479,6 +565,7 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 							Source:      sr.Source,
 							Favicon:     "",
 							AIOverview:  "",
+							WebSource:   "",
 						},
 					})
 					seq++
@@ -492,6 +579,7 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 					}
 					ikey = normalize(ikey)
 					if _, dup := seenImage[ikey]; dup {
+						fmt.Println("ignoring duplicate youtube url-->", ikey, "seq-->", seq)
 						seq++
 						continue
 					}
@@ -510,18 +598,23 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 							Favicon:    "",
 							Source:     "",
 							AIOverview: "",
+							WebSource:  "",
 						},
 					})
 					seq++
 				}
 				// videos (not citations)
 				for _, v := range c.Videos {
-					// Skip YouTube channel and shorts URLs
 					if strings.Contains(v.URL, "/channel/") || strings.Contains(v.URL, "/shorts/") {
+						//if we dont ++ the seq what if in ai summary it is pointing to the number
+						fmt.Println("ignoring youtube channel or shorts url-->", v.URL, "seq-->", seq)
+						seq++
 						continue
 					}
 					key := normalize(v.URL)
 					if _, dup := seenVideo[key]; dup {
+						fmt.Println("ignoring duplicate youtube url-->", v.URL, "seq-->", seq)
+
 						seq++
 						continue
 					}
@@ -605,7 +698,7 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 							if !ok || p == nil {
 								return
 							}
-							data, err := ExtractMetadata(urlStr)
+							data, err := ExtractMetadataWithRetry(urlStr)
 							if err != nil {
 								fmt.Printf("ExtractMetadata error for seq_no=%d url=%s: %v\n", combined_global[idx].SeqNo, urlStr, err)
 								fmt.Println("error from web/image scrapper")
@@ -659,7 +752,7 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 						go func() {
 							defer wg.Done()
 							//call the web_image_extractor
-							data, err := ExtractMetadata(urlStr)
+							data, err := ExtractMetadataWithRetry(urlStr)
 							if err != nil {
 								fmt.Printf("ExtractMetadata error for seq_no=%d url=%s: %v\n", combined_global[idx].SeqNo, urlStr, err)
 								fmt.Println("error from web/image scrapper")
@@ -739,13 +832,8 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 							ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 							defer cancel()
 
-							// minimal retry: if 429, wait briefly and try once more
+							// FetchYouTubeDetails now includes built-in retry logic
 							sd, err := FetchYouTubeDetails(ctx, vid)
-							if err != nil && strings.Contains(err.Error(), "status 429") {
-								time.Sleep(1 * time.Second)
-								fmt.Println("ScrapingDog rate limit hit, retrying...", vid)
-								sd, err = FetchYouTubeDetails(ctx, vid)
-							}
 
 							if err == nil {
 								enr := BuildEnrichment(sd)
@@ -1044,6 +1132,11 @@ func StartBackgroundPerplexity(parent context.Context, apiKey string, req import
 		body, _, err := StreamPerplexity(ctx, nil, apiKey, req)
 		if err != nil {
 			fmt.Printf("Perplexity error: %v\n", err)
+			//if error is 429 them kindly  send in both links that sockets was closed due to rate limit
+			if strings.Contains(err.Error(), "429") {
+				sendToClient(search_id_ai_summary, "Sockets was closed due to rate limit\n"+search_id_ai_summary+"\n")
+				sendToClient(search_id_list, "Sockets was closed due to rate limit\n"+search_id_list+"\n")
+			}
 			// Immediately close any registered TCP clients for this search to avoid dangling sockets
 			if search_id_ai_summary != "" {
 				DisconnectClient(search_id_ai_summary)

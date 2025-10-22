@@ -106,7 +106,28 @@ type scrapingDogResponse struct {
 	Video scrapingDogVideo `json:"video"`
 }
 
-// FetchYouTubeDetails calls ScrapingDog YouTube API and returns the parsed response.
+// isRetryableError checks if the error suggests a retryable condition.
+func isRetryableError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "timeout") ||
+		strings.Contains(msg, "context deadline exceeded") ||
+		strings.Contains(msg, "connection refused") ||
+		strings.Contains(msg, "network is unreachable")
+}
+
+// isRetryableStatusCode checks if the HTTP status code suggests a retryable condition.
+func isRetryableStatusCode(statusCode int) bool {
+	// Retry on rate limits, server errors, and gateway timeouts
+	return statusCode == 429 || // Rate limit
+		statusCode == 502 || // Bad Gateway
+		statusCode == 503 || // Service Unavailable
+		statusCode == 504 // Gateway Timeout
+}
+
+// FetchYouTubeDetails calls ScrapingDog YouTube API with retry logic and returns the parsed response.
 func FetchYouTubeDetails(ctx context.Context, videoID string) (*scrapingDogResponse, error) {
 	apiKey := os.Getenv("Scrapping_Dog_API_Key")
 	if apiKey == "" {
@@ -118,24 +139,57 @@ func FetchYouTubeDetails(ctx context.Context, videoID string) (*scrapingDogRespo
 	q.Set("v", videoID)
 	urlStr := endpoint + "?" + q.Encode()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, nil)
-	if err != nil {
-		return nil, err
+	// Retry configuration: 3 attempts with exponential backoff
+	maxRetries := 3
+	baseDelay := 2 * time.Second // Increased base delay for rate limits
+
+	var lastErr error
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		client := &http.Client{Timeout: 15 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = err
+			// Retry on network/timeout errors
+			if isRetryableError(err) && attempt < maxRetries-1 {
+				delay := time.Duration(attempt+1) * baseDelay
+				time.Sleep(delay)
+				continue
+			}
+			return nil, err
+		}
+
+		// Handle HTTP status codes
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			resp.Body.Close()
+			lastErr = fmt.Errorf("scrapingdog status %d", resp.StatusCode)
+
+			// Retry on retryable status codes
+			if isRetryableStatusCode(resp.StatusCode) && attempt < maxRetries-1 {
+				delay := time.Duration(attempt+1) * baseDelay
+				// Add jitter to avoid thundering herd (random 0-1 second)
+				jitter := time.Duration(attempt) * 500 * time.Millisecond
+				time.Sleep(delay + jitter)
+				continue
+			}
+			return nil, lastErr
+		}
+
+		// Success - parse response
+		var out scrapingDogResponse
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
+		resp.Body.Close()
+		return &out, nil
 	}
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("scrapingdog status %d", resp.StatusCode)
-	}
-	var out scrapingDogResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return nil, err
-	}
-	return &out, nil
+
+	return nil, lastErr
 }
 
 // MapScrapingDogToVideoFields maps the ScrapingDog response to our video fields.

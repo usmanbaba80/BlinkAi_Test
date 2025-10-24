@@ -34,9 +34,12 @@ func ExtractYouTubeID(rawURL string) (string, bool) {
 		}
 		// /embed/VIDEOID
 		parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-		for i := 0; i < len(parts)-1; i++ {
-			if parts[i] == "embed" && i+1 < len(parts) {
-				return parts[i+1], true
+		// Safe array access with bounds checking
+		if len(parts) > 1 {
+			for i := 0; i < len(parts)-1; i++ {
+				if parts[i] == "embed" && i+1 < len(parts) {
+					return parts[i+1], true
+				}
 			}
 		}
 	}
@@ -79,7 +82,16 @@ func parseCountString(s string) int {
 		return int(f * mult)
 	}
 	// fallback: extract digits
-	digits := regexp.MustCompile(`\d+`).FindAllString(s, -1)
+	// Safe regex compilation with panic recovery
+	var digits []string
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Printf("Warning: Regex compilation panic recovered: %v\n", r)
+			}
+		}()
+		digits = regexp.MustCompile(`\d+`).FindAllString(s, -1)
+	}()
 	if len(digits) == 0 {
 		return 0
 	}
@@ -165,7 +177,15 @@ func FetchYouTubeDetails(ctx context.Context, videoID string) (*scrapingDogRespo
 
 		// Handle HTTP status codes
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			resp.Body.Close()
+			// Safe response body close with panic recovery
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						fmt.Printf("Warning: Panic recovered while closing response body: %v\n", r)
+					}
+				}()
+				resp.Body.Close()
+			}()
 			lastErr = fmt.Errorf("scrapingdog status %d", resp.StatusCode)
 
 			// Retry on retryable status codes
@@ -182,10 +202,26 @@ func FetchYouTubeDetails(ctx context.Context, videoID string) (*scrapingDogRespo
 		// Success - parse response
 		var out scrapingDogResponse
 		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-			resp.Body.Close()
+			// Safe response body close with panic recovery
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						fmt.Printf("Warning: Panic recovered while closing response body: %v\n", r)
+					}
+				}()
+				resp.Body.Close()
+			}()
 			return nil, err
 		}
-		resp.Body.Close()
+		// Safe response body close with panic recovery
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Printf("Warning: Panic recovered while closing response body: %v\n", r)
+				}
+			}()
+			resp.Body.Close()
+		}()
 		return &out, nil
 	}
 
@@ -209,7 +245,13 @@ func BuildEnrichment(sd *scrapingDogResponse) YouTubeEnrichment {
 	if sd == nil {
 		return YouTubeEnrichment{}
 	}
+	// Safe struct field access - structs can't be nil, but we can check for empty values
 	v := sd.Video
+	// Check if video data is empty (all fields are zero values)
+	if v.ID == "" && v.Title == "" && v.Author == "" {
+		// Return empty enrichment if video data appears to be empty
+		return YouTubeEnrichment{}
+	}
 	return YouTubeEnrichment{
 		VideoID:         v.ID,
 		Title:           v.Title,

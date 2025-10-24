@@ -19,6 +19,7 @@ type WebItem struct {
 	Source      string  `json:"source"`
 	Favicon     string  `json:"favicon"`
 	WebSource   string  `json:"web_source"`
+	Description string  `json:"description"`
 }
 
 type ImageItem struct {

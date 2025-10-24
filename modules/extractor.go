@@ -13,6 +13,20 @@ import (
 	importModel "github.com/InvicttusGIT/BlinkAi_SearchEngineApps_Productivity_Backend/models"
 )
 
+// isRetryableNetworkError checks if the error suggests a retryable network condition.
+func isRetryableNetworkError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "connection was forcibly closed") ||
+		strings.Contains(msg, "connection reset") ||
+		strings.Contains(msg, "timeout") ||
+		strings.Contains(msg, "context deadline exceeded") ||
+		strings.Contains(msg, "network is unreachable") ||
+		strings.Contains(msg, "connection refused")
+}
+
 // callExtractorAPI makes HTTP POST request to the extractor API
 func callExtractorAPI(apiURL string, requestBody map[string]interface{}) error {
 	// Get API key from environment
@@ -43,10 +57,27 @@ func callExtractorAPI(apiURL string, requestBody map[string]interface{}) error {
 		Timeout: 10 * time.Minute, // 10 minutes timeout for video processing
 	}
 
-	// Make the request
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to make request: %v", err)
+	// Make the request with retry logic for network issues
+	var resp *http.Response
+	var requestErr error
+	maxRetries := 3
+	baseDelay := 2 * time.Second
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		resp, requestErr = client.Do(req)
+		if requestErr == nil {
+			break
+		}
+
+		// Check if error is retryable (network issues)
+		if isRetryableNetworkError(requestErr) && attempt < maxRetries-1 {
+			delay := time.Duration(attempt+1) * baseDelay
+			fmt.Printf("Retrying extractor API call (attempt %d/%d) after %v: %v\n", attempt+1, maxRetries, delay, requestErr)
+			time.Sleep(delay)
+			continue
+		}
+
+		return fmt.Errorf("failed to make request after %d attempts: %v", maxRetries, requestErr)
 	}
 	defer resp.Body.Close()
 
@@ -147,6 +178,10 @@ func callExtractorAPI(apiURL string, requestBody map[string]interface{}) error {
 		decodeAndHandle(scanner.Text())
 	}
 	if err := scanner.Err(); err != nil {
+		// Check if it's a network error that should be retried
+		if isRetryableNetworkError(err) {
+			return fmt.Errorf("network error during response scanning (retryable): %v", err)
+		}
 		// Fallback: try to read the remaining body for diagnostics
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("failed to scan extractor response: %v; tail=%s", err, string(body))

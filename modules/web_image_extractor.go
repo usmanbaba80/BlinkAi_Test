@@ -166,6 +166,12 @@ func ExtractMetadata(url1 string) (*models.Web_Image_MetaData, error) {
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %v", err)
 	}
+	// Safe response body close with panic recovery
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("Warning: Panic recovered while closing response body: %v\n", r)
+		}
+	}()
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -215,8 +221,17 @@ func resolveURL(base, ref string) string {
 		return "https:" + ref
 	}
 	if strings.HasPrefix(ref, "/") {
-		if u, err := http.NewRequest("GET", base, nil); err == nil {
-			return u.URL.Scheme + "://" + u.URL.Host + ref
+		if u, err := http.NewRequest("GET", base, nil); err == nil && u.URL != nil {
+			// Safe URL field access with nil checking
+			scheme := u.URL.Scheme
+			host := u.URL.Host
+			if scheme == "" {
+				scheme = "https" // Default to HTTPS
+			}
+			if host == "" {
+				host = "localhost" // Fallback host
+			}
+			return scheme + "://" + host + ref
 		}
 	}
 	return ref
@@ -238,14 +253,14 @@ func webSourceFromUrl(url1 string) string {
 		clean = strings.TrimPrefix(clean, "m.")
 		clean = strings.TrimPrefix(clean, "edition.")
 
-		// Remove path and query parameters
-		if idx := strings.Index(clean, "/"); idx != -1 {
+		// Remove path and query parameters - safe slice operations
+		if idx := strings.Index(clean, "/"); idx != -1 && idx < len(clean) {
 			clean = clean[:idx]
 		}
-		if idx := strings.Index(clean, "?"); idx != -1 {
+		if idx := strings.Index(clean, "?"); idx != -1 && idx < len(clean) {
 			clean = clean[:idx]
 		}
-		if idx := strings.Index(clean, "#"); idx != -1 {
+		if idx := strings.Index(clean, "#"); idx != -1 && idx < len(clean) {
 			clean = clean[:idx]
 		}
 
@@ -269,6 +284,7 @@ func webSourceFromUrl(url1 string) string {
 	host = strings.Replace(host, "edition.", "", 1)
 
 	parts := strings.Split(host, ".")
+	// Safe array access with bounds checking
 	if len(parts) >= 2 {
 		return parts[len(parts)-2] // Second-level domain (e.g., "google" from "google.com")
 	} else if len(parts) == 1 && parts[0] != "" {

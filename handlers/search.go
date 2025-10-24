@@ -37,7 +37,7 @@ func SearchHandler(pool *pgxpool.Pool) echo.HandlerFunc {
 			})
 		}
 		// Validate user - get existing user or create new one
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		user, err := database.GetOrCreateUser(ctx, pool, req.UserID, req.DeviceID, req.PlatformName)
 		if err != nil {
@@ -63,6 +63,7 @@ func SearchHandler(pool *pgxpool.Pool) echo.HandlerFunc {
 		// Store the search request in the database
 		var systemPromptID string
 		if promptFound {
+			// Safe access to promptData.ID - it's guaranteed to be valid if promptFound is true
 			systemPromptID = promptData.ID.String()
 		}
 
@@ -77,6 +78,7 @@ func SearchHandler(pool *pgxpool.Pool) echo.HandlerFunc {
 		// Build Perplexity messages (system + alternating user/assistant from keywords)
 		sysPrompt := ""
 		if promptFound {
+			// Safe access to promptData.PromptText - it's guaranteed to be valid if promptFound is true
 			sysPrompt = promptData.PromptText
 		}
 		messages := modules.BuildMessages(sysPrompt, req.Keywords)
@@ -97,9 +99,28 @@ func SearchHandler(pool *pgxpool.Pool) echo.HandlerFunc {
 				MaxSearchResults: 10,
 			}
 			// Background processing via module helper
-			go modules.StartBackgroundPerplexity(context.Background(), modules.MustGetPerplexityKey(), pReq, 90*time.Second, searchRecord.SearchID.String()+"_ai_summary", searchRecord.SearchID.String()+"_list", searchRecord, pool, req.PlatformName, func(object, content string) {
-				fmt.Printf("object=%s content_chunk=%q\n", object, content)
-			})
+			// Safe handling: only start background processing if searchRecord is not nil
+			if searchRecord != nil {
+				// Check if Perplexity API key is available
+				apiKey := modules.MustGetPerplexityKey()
+				if apiKey == "" {
+					fmt.Printf("Warning: Perplexity API key not found, skipping background processing\n")
+				} else {
+					go func() {
+						// Add panic recovery for goroutine
+						defer func() {
+							if r := recover(); r != nil {
+								fmt.Printf("Panic recovered in background Perplexity processing: %v\n", r)
+							}
+						}()
+						modules.StartBackgroundPerplexity(context.Background(), apiKey, pReq, 110*time.Second, searchRecord.SearchID.String()+"_ai_summary", searchRecord.SearchID.String()+"_list", searchRecord, pool, req.PlatformName, func(object, content string) {
+							fmt.Printf("object=%s content_chunk=%q\n", object, content)
+						})
+					}()
+				}
+			} else {
+				fmt.Printf("Warning: Skipping background processing - searchRecord is nil\n")
+			}
 
 		} else {
 			fmt.Println("video api hit for perplexity")
@@ -116,9 +137,28 @@ func SearchHandler(pool *pgxpool.Pool) echo.HandlerFunc {
 				Temperature:            0.2,
 			}
 			// Background processing via module helper
-			go modules.StartBackgroundPerplexity(context.Background(), modules.MustGetPerplexityKey(), pReq, 90*time.Second, searchRecord.SearchID.String()+"_ai_summary", searchRecord.SearchID.String()+"_list", searchRecord, pool, req.PlatformName, func(object, content string) {
-				fmt.Printf("object=%s content_chunk=%q\n", object, content)
-			})
+			// Safe handling: only start background processing if searchRecord is not nil
+			if searchRecord != nil {
+				// Check if Perplexity API key is available
+				apiKey := modules.MustGetPerplexityKey()
+				if apiKey == "" {
+					fmt.Printf("Warning: Perplexity API key not found, skipping background processing\n")
+				} else {
+					go func() {
+						// Add panic recovery for goroutine
+						defer func() {
+							if r := recover(); r != nil {
+								fmt.Printf("Panic recovered in background Perplexity processing: %v\n", r)
+							}
+						}()
+						modules.StartBackgroundPerplexity(context.Background(), apiKey, pReq, 90*time.Second, searchRecord.SearchID.String()+"_ai_summary", searchRecord.SearchID.String()+"_list", searchRecord, pool, req.PlatformName, func(object, content string) {
+							fmt.Printf("object=%s content_chunk=%q\n", object, content)
+						})
+					}()
+				}
+			} else {
+				fmt.Printf("Warning: Skipping background processing - searchRecord is nil\n")
+			}
 		}
 
 		// Immediate ack to client
@@ -131,11 +171,12 @@ func SearchHandler(pool *pgxpool.Pool) echo.HandlerFunc {
 			"keywords":    req.Keywords,
 			"timestamp":   time.Now().Format(time.RFC3339),
 		}
+		// Safe access to searchRecord - only if it's not nil
 		if searchRecord != nil {
 			ack["search_id_ai_summary"] = searchRecord.SearchID.String() + "_ai_summary"
 			ack["search_id_list"] = searchRecord.SearchID.String() + "_list"
-
 		}
+		// Safe access to promptData - only if prompt was found
 		if promptFound {
 			ack["system_prompt_id"] = promptData.ID.String()
 		}
@@ -149,6 +190,7 @@ func SearchHandler(pool *pgxpool.Pool) echo.HandlerFunc {
 		fmt.Printf("Search Type: %s\n", req.SearchType)
 		fmt.Printf("User Status: %s (Created: %s)\n", user.ID, user.CreatedAt.Format("2006-01-02 15:04:05"))
 		fmt.Printf("System Prompt Found: %t\n", promptFound)
+		// Safe access to promptData - only if prompt was found
 		if promptFound {
 			fmt.Printf("System Prompt ID: %s\n", promptData.ID)
 			fmt.Printf("System Prompt Type: %s\n", promptData.SearchType)

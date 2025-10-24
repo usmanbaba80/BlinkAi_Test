@@ -160,6 +160,12 @@ var (
 // Start TCP listener (once)
 func ensureTCPServer(addr string) {
 	go func() {
+		// Add panic recovery for TCP server goroutine
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Printf("Panic recovered in TCP server: %v\n", r)
+			}
+		}()
 		ln, err := net.Listen("tcp", addr)
 		if err != nil {
 			fmt.Println("❌ TCP listen error:", err)
@@ -291,8 +297,14 @@ func getMessagePreview(msg string) string {
 	}
 	// Truncate long messages and escape newlines
 	preview := strings.ReplaceAll(msg, "\n", "\\n")
+	// Safe slice operation with proper bounds checking
 	if len(preview) > 100 {
-		preview = preview[:100] + "..."
+		// Ensure we don't slice beyond bounds
+		maxLen := 100
+		if len(preview) < maxLen {
+			maxLen = len(preview)
+		}
+		preview = preview[:maxLen] + "..."
 	}
 	return preview
 }
@@ -326,12 +338,20 @@ func sendToClient(searchID, chunk string) {
 		client.mu.Unlock()
 		return
 	}
-	select {
-	case client.MsgCh <- chunk:
-		// sent
-	default:
-		// drop if full
-	}
+	// Safe channel send with panic recovery
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Printf("Warning: Panic recovered while sending to client %s: %v\n", searchID, r)
+			}
+		}()
+		select {
+		case client.MsgCh <- chunk:
+			// sent successfully
+		default:
+			// drop if full - this is expected behavior
+		}
+	}()
 	client.mu.Unlock()
 	//_ = AppendContentToFile(searchID, "newChunk---->"+chunk)
 }
@@ -371,7 +391,15 @@ func DisconnectClient(searchID string) {
 	client.mu.Lock()
 	if !client.closed {
 		client.closed = true
-		close(client.MsgCh)
+		// Safe channel close with panic recovery
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Printf("Warning: Panic recovered while closing channel for client %s: %v\n", searchID, r)
+				}
+			}()
+			close(client.MsgCh)
+		}()
 	}
 	client.mu.Unlock()
 	_ = client.Conn.Close()
@@ -478,11 +506,14 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 			continue
 		}
 		content := ""
+		// Safe array access with proper bounds checking
 		if len(chunk.Choices) > 0 {
-			if chunk.Choices[0].Message != nil {
-				content = chunk.Choices[0].Message.Content
-			} else if chunk.Choices[0].Delta != nil {
-				content = chunk.Choices[0].Delta.Content
+			// Safe access to first choice
+			firstChoice := chunk.Choices[0]
+			if firstChoice.Message != nil {
+				content = firstChoice.Message.Content
+			} else if firstChoice.Delta != nil {
+				content = firstChoice.Delta.Content
 			}
 		}
 		if !firstListPrinted {
@@ -506,6 +537,7 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 				seenImage := make(map[string]struct{}, 64)
 				//combined := make([]importModel.CombinedItem, 0, 30)
 				// search_results classified as video (YouTube) or web; both are citations
+				// Safe range over slice - Go handles nil slices gracefully
 				for _, sr := range c.SearchResults {
 
 					isYouTube := strings.Contains(sr.URL, "youtube.com") || strings.Contains(sr.URL, "youtu.be")
@@ -571,6 +603,7 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 					seq++
 				}
 				// images (not citations)
+				// Safe range over slice - Go handles nil slices gracefully
 				for _, im := range c.Images {
 					// Dedupe images by OriginURL if present, else ImageURL
 					ikey := im.OriginURL
@@ -604,6 +637,7 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 					seq++
 				}
 				// videos (not citations)
+				// Safe range over slice - Go handles nil slices gracefully
 				for _, v := range c.Videos {
 					if strings.Contains(v.URL, "/channel/") || strings.Contains(v.URL, "/shorts/") {
 						//if we dont ++ the seq what if in ai summary it is pointing to the number
@@ -650,7 +684,7 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 				//combined_global = combined_global
 				// Print combined list once (pretty printed for readability)
 				if b, err := json.MarshalIndent(combined_global, "", "  "); err == nil {
-					//fmt.Printf("combined_list:\n%s\n", string(b))
+					fmt.Printf("combined_list before enrichment:\n%s\n", string(b))
 					if search_id_list != "" {
 						sendToClient(search_id_list, string(b)+search_id_list+"\n")
 					}
@@ -669,6 +703,7 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 					idx := i
 					urlStr := ""
 					if combined_global[idx].Kind == "web" {
+						// Safe type assertion with error handling
 						switch p := combined_global[idx].Payload.(type) {
 						case importModel.WebItem:
 							urlStr = p.URL
@@ -676,14 +711,23 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 							if p != nil {
 								urlStr = p.URL
 							}
+						default:
+							// Handle unexpected type gracefully
+							fmt.Printf("Warning: Unexpected web payload type for seq=%d\n", combined_global[idx].SeqNo)
 						}
 					} else if combined_global[idx].Kind == "image" {
+						// Safe type assertion with proper error handling
 						if p, ok := combined_global[idx].Payload.(*importModel.ImageItem); ok && p != nil {
 							urlStr = p.OriginURL
+						} else {
+							fmt.Printf("Warning: Failed to extract image URL for seq=%d\n", combined_global[idx].SeqNo)
 						}
 					} else if combined_global[idx].Kind == "video" {
+						// Safe type assertion with proper error handling
 						if p, ok := combined_global[idx].Payload.(importModel.VideoItem); ok {
 							urlStr = p.URL
+						} else {
+							fmt.Printf("Warning: Failed to extract video URL for seq=%d\n", combined_global[idx].SeqNo)
 						}
 					}
 
@@ -693,7 +737,13 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 					if combined_global[idx].Kind == "image" {
 						wg.Add(1)
 						go func() {
-							defer wg.Done()
+							// Add panic recovery for image processing goroutine
+							defer func() {
+								if r := recover(); r != nil {
+									fmt.Printf("Panic recovered in image processing for seq=%d: %v\n", combined_global[idx].SeqNo, r)
+								}
+								wg.Done()
+							}()
 							p, ok := combined_global[idx].Payload.(*importModel.ImageItem)
 							if !ok || p == nil {
 								return
@@ -750,7 +800,13 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 					if combined_global[idx].Kind == "web" {
 						wg.Add(1)
 						go func() {
-							defer wg.Done()
+							// Add panic recovery for web processing goroutine
+							defer func() {
+								if r := recover(); r != nil {
+									fmt.Printf("Panic recovered in web processing for seq=%d: %v\n", combined_global[idx].SeqNo, r)
+								}
+								wg.Done()
+							}()
 							//call the web_image_extractor
 							data, err := ExtractMetadataWithRetry(urlStr)
 							if err != nil {
@@ -758,24 +814,27 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 								fmt.Println("error from web/image scrapper")
 							}
 							var current importModel.WebItem
+							// Safe type assertion with proper error handling
 							switch p := combined_global[idx].Payload.(type) {
 							case importModel.WebItem:
 								current = p
 							case *importModel.WebItem:
 								if p == nil {
+									fmt.Printf("Warning: Nil WebItem pointer for seq=%d\n", combined_global[idx].SeqNo)
 									return
 								}
 								current = *p
 							default:
+								fmt.Printf("Warning: Unexpected WebItem payload type for seq=%d\n", combined_global[idx].SeqNo)
 								return
 							}
 							// derive fields safely from extractor result
-							newSnippet := current.Snippet
+							newDescription := ""
 							websource := webSourceFromUrl(urlStr)
 							//newFavicon := fmt.Sprintf("https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=%s&size=32", urlStr)
 							if err == nil && data != nil {
 								if strings.TrimSpace(data.Description) != "" {
-									newSnippet = data.Description
+									newDescription = data.Description
 								}
 								websource = data.WebSource
 								// if strings.TrimSpace(data.Favicon) != "" {
@@ -788,12 +847,13 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 								URL:         current.URL,
 								Date:        current.Date,
 								LastUpdated: current.LastUpdated,
-								Snippet:     newSnippet,
+								Snippet:     current.Snippet,
 								Source:      current.Source,
 								//Favicon:     newFavicon,
-								Favicon:    fmt.Sprintf("https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=%s&size=32", urlStr),
-								AIOverview: current.AIOverview,
-								WebSource:  websource,
+								Favicon:     fmt.Sprintf("https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=%s&size=32", urlStr),
+								AIOverview:  current.AIOverview,
+								WebSource:   websource,
+								Description: newDescription,
 							}
 							// if b, err := json.MarshalIndent(importModel.CombinedItem{
 							// 	SeqNo:      combined_global[idx].SeqNo,
@@ -827,7 +887,13 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 					//time.Sleep(1 * time.Second)
 					wg.Add(1)
 					go func() {
-						defer wg.Done()
+						// Add panic recovery for video processing goroutine
+						defer func() {
+							if r := recover(); r != nil {
+								fmt.Printf("Panic recovered in video processing for seq=%d: %v\n", combined_global[idx].SeqNo, r)
+							}
+							wg.Done()
+						}()
 						if vid, ok := ExtractYouTubeID(urlStr); ok {
 							ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 							defer cancel()
@@ -838,7 +904,12 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 							if err == nil {
 								enr := BuildEnrichment(sd)
 								// Mirror image/web assignment: take fallbacks from combined_global[idx]
-								current := combined_global[idx].Payload.(importModel.VideoItem)
+								// Safe type assertion with error handling
+								current, ok := combined_global[idx].Payload.(importModel.VideoItem)
+								if !ok {
+									fmt.Printf("Warning: Failed to cast payload to VideoItem for seq=%d\n", combined_global[idx].SeqNo)
+									return
+								}
 								newPayload := importModel.VideoItem{
 									VideoID:         chooseString(enr.VideoID, current.VideoID),
 									URL:             current.URL,
@@ -876,6 +947,7 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 								fmt.Printf("ScrapingDog error for seq_no=%d url=%s: %v\n", combined_global[idx].SeqNo, urlStr, err)
 								// On repeated failure, send a fallback update marking not processed
 								if search_id_list != "" {
+									// Safe type assertion with error handling
 									if current, ok := combined_global[idx].Payload.(importModel.VideoItem); ok {
 										fallback := importModel.VideoItem{
 											VideoID:         current.VideoID,
@@ -922,8 +994,10 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 			//_ = AppendContentToFile(search_id_ai_summary, content)
 		}
 		// If the provider signals completion via finish_reason in the last chunk, end the loop
-		if len(chunk.Choices) > 0 && chunk.Choices[0].FinishReason != nil {
-			if *chunk.Choices[0].FinishReason == "stop" {
+		if len(chunk.Choices) > 0 {
+			// Safe access to first choice
+			firstChoice := chunk.Choices[0]
+			if firstChoice.FinishReason != nil && *firstChoice.FinishReason == "stop" {
 				// Optionally emit a final SSE record and finish
 				_ = writeSSE(map[string]any{
 					"object":        chunk.Object,
@@ -948,6 +1022,12 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 				// }
 				//sending the list to the ytdl extractor
 				go func() {
+					// Add panic recovery for video extraction goroutine
+					defer func() {
+						if r := recover(); r != nil {
+							fmt.Printf("Panic recovered in video extraction: %v\n", r)
+						}
+					}()
 					ProcessVideoExtraction(combined_global, searchRecord, platoform)
 				}()
 
@@ -957,9 +1037,14 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 				if search_id_list != "" {
 					DisconnectClient(search_id_list)
 				}
+
 				// Persist response and items if DB is available and search record present
 				if pool != nil && searchRecord != nil {
-					sr, err := database.CreateSearchResponse(ctx, pool, searchRecord.SearchID, &lastNonEmptyContent)
+					// Individual context for CreateSearchResponse (5-second timeout)
+					dbCtx1, dbCancel1 := context.WithTimeout(context.Background(), 5*time.Second)
+					defer dbCancel1()
+
+					sr, err := database.CreateSearchResponse(dbCtx1, pool, searchRecord.SearchID, &lastNonEmptyContent)
 					if err != nil {
 						fmt.Printf("db: create search_response failed: %v\n", err)
 					} else {
@@ -970,7 +1055,11 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 							case "video":
 								switch v := item.Payload.(type) {
 								case importModel.VideoItem:
-									vid, err := database.InsertVideoURL(ctx, pool, sr.ResponseID, item.IsCitation, &seq)
+									// Individual context for InsertVideoURL (5-second timeout)
+									dbCtx2, dbCancel2 := context.WithTimeout(context.Background(), 5*time.Second)
+									defer dbCancel2()
+
+									vid, err := database.InsertVideoURL(dbCtx2, pool, sr.ResponseID, item.IsCitation, &seq)
 									if err != nil {
 										fmt.Printf("db: insert video_urls failed: %v\n", err)
 										continue
@@ -983,7 +1072,12 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 									views := int64(v.Views)
 									desc := v.Description
 									vm := importModel.VideoMetadata{VideoID: vid, VideoURL: &url, Title: &title, Thumbnail: &thumb, PublishDate: pub, Likes: &likes, Views: &views, Description: &desc}
-									if err := database.InsertVideoMetadata(ctx, pool, vid, vm); err != nil {
+
+									// Individual context for InsertVideoMetadata (5-second timeout)
+									dbCtx3, dbCancel3 := context.WithTimeout(context.Background(), 5*time.Second)
+									defer dbCancel3()
+
+									if err := database.InsertVideoMetadata(dbCtx3, pool, vid, vm); err != nil {
 										fmt.Printf("db: insert video_metadata failed: %v\n", err)
 									}
 								case *importModel.VideoItem:
@@ -991,7 +1085,11 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 										fmt.Printf("db: skip video nil payload at seq=%d\n", seq)
 										continue
 									}
-									vid, err := database.InsertVideoURL(ctx, pool, sr.ResponseID, item.IsCitation, &seq)
+									// Individual context for InsertVideoURL (5-second timeout)
+									dbCtx4, dbCancel4 := context.WithTimeout(context.Background(), 5*time.Second)
+									defer dbCancel4()
+
+									vid, err := database.InsertVideoURL(dbCtx4, pool, sr.ResponseID, item.IsCitation, &seq)
 									if err != nil {
 										fmt.Printf("db: insert video_urls failed: %v\n", err)
 										continue
@@ -1004,7 +1102,12 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 									views := int64(v.Views)
 									desc := v.Description
 									vm := importModel.VideoMetadata{VideoID: vid, VideoURL: &url, Title: &title, Thumbnail: &thumb, PublishDate: pub, Likes: &likes, Views: &views, Description: &desc}
-									if err := database.InsertVideoMetadata(ctx, pool, vid, vm); err != nil {
+
+									// Individual context for InsertVideoMetadata (5-second timeout)
+									dbCtx5, dbCancel5 := context.WithTimeout(context.Background(), 5*time.Second)
+									defer dbCancel5()
+
+									if err := database.InsertVideoMetadata(dbCtx5, pool, vid, vm); err != nil {
 										fmt.Printf("db: insert video_metadata failed: %v\n", err)
 									}
 								default:
@@ -1013,10 +1116,19 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 							case "web":
 								switch w := item.Payload.(type) {
 								case importModel.WebItem:
-									if err := database.InsertWebURL(ctx, pool, sr.ResponseID, w.URL, item.IsCitation, &seq); err != nil {
+									// Individual context for InsertWebURL (5-second timeout)
+									dbCtx6, dbCancel6 := context.WithTimeout(context.Background(), 5*time.Second)
+									defer dbCancel6()
+
+									if err := database.InsertWebURL(dbCtx6, pool, sr.ResponseID, w.URL, item.IsCitation, &seq); err != nil {
 										fmt.Printf("db: insert web_urls failed: %v\n", err)
 									}
-									if err := database.InsertWebMetadata(ctx, pool, w); err != nil {
+
+									// Individual context for InsertWebMetadata (5-second timeout)
+									dbCtx7, dbCancel7 := context.WithTimeout(context.Background(), 5*time.Second)
+									defer dbCancel7()
+
+									if err := database.InsertWebMetadata(dbCtx7, pool, w); err != nil {
 										fmt.Printf("db: insert web_metadata failed: %v\n", err)
 									}
 								case *importModel.WebItem:
@@ -1024,10 +1136,19 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 										fmt.Printf("db: skip web nil payload at seq=%d\n", seq)
 										continue
 									}
-									if err := database.InsertWebURL(ctx, pool, sr.ResponseID, w.URL, item.IsCitation, &seq); err != nil {
+									// Individual context for InsertWebURL (5-second timeout)
+									dbCtx8, dbCancel8 := context.WithTimeout(context.Background(), 5*time.Second)
+									defer dbCancel8()
+
+									if err := database.InsertWebURL(dbCtx8, pool, sr.ResponseID, w.URL, item.IsCitation, &seq); err != nil {
 										fmt.Printf("db: insert web_urls failed: %v\n", err)
 									}
-									if err := database.InsertWebMetadata(ctx, pool, *w); err != nil {
+
+									// Individual context for InsertWebMetadata (5-second timeout)
+									dbCtx9, dbCancel9 := context.WithTimeout(context.Background(), 5*time.Second)
+									defer dbCancel9()
+
+									if err := database.InsertWebMetadata(dbCtx9, pool, *w); err != nil {
 										fmt.Printf("db: insert web_metadata failed: %v\n", err)
 									}
 								default:
@@ -1036,10 +1157,19 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 							case "image":
 								switch im := item.Payload.(type) {
 								case importModel.ImageItem:
-									if err := database.InsertImageURL(ctx, pool, sr.ResponseID, im.OriginURL, item.IsCitation, &seq); err != nil {
+									// Individual context for InsertImageURL (5-second timeout)
+									dbCtx10, dbCancel10 := context.WithTimeout(context.Background(), 5*time.Second)
+									defer dbCancel10()
+
+									if err := database.InsertImageURL(dbCtx10, pool, sr.ResponseID, im.OriginURL, item.IsCitation, &seq); err != nil {
 										fmt.Printf("db: insert image_urls failed: %v\n", err)
 									}
-									if err := database.InsertImageMetadata(ctx, pool, im); err != nil {
+
+									// Individual context for InsertImageMetadata (5-second timeout)
+									dbCtx11, dbCancel11 := context.WithTimeout(context.Background(), 5*time.Second)
+									defer dbCancel11()
+
+									if err := database.InsertImageMetadata(dbCtx11, pool, im); err != nil {
 										fmt.Printf("db: insert image_metadata failed: %v\n", err)
 									}
 								case *importModel.ImageItem:
@@ -1047,10 +1177,19 @@ func ForwardStream(ctx context.Context, r io.Reader, w io.Writer, logFn func(obj
 										fmt.Printf("db: skip image nil payload at seq=%d\n", seq)
 										continue
 									}
-									if err := database.InsertImageURL(ctx, pool, sr.ResponseID, im.OriginURL, item.IsCitation, &seq); err != nil {
+									// Individual context for InsertImageURL (5-second timeout)
+									dbCtx12, dbCancel12 := context.WithTimeout(context.Background(), 5*time.Second)
+									defer dbCancel12()
+
+									if err := database.InsertImageURL(dbCtx12, pool, sr.ResponseID, im.OriginURL, item.IsCitation, &seq); err != nil {
 										fmt.Printf("db: insert image_urls failed: %v\n", err)
 									}
-									if err := database.InsertImageMetadata(ctx, pool, *im); err != nil {
+
+									// Individual context for InsertImageMetadata (5-second timeout)
+									dbCtx13, dbCancel13 := context.WithTimeout(context.Background(), 5*time.Second)
+									defer dbCancel13()
+
+									if err := database.InsertImageMetadata(dbCtx13, pool, *im); err != nil {
 										fmt.Printf("db: insert image_metadata failed: %v\n", err)
 									}
 								default:
@@ -1105,6 +1244,7 @@ func BuildMessages(systemPrompt string, keywords []string) []importModel.ChatMes
 // StartBackgroundPerplexity starts a goroutine that streams from Perplexity and logs each chunk via logFn.
 // It uses io.Discard for output (no client streaming) and returns immediately.
 func StartBackgroundPerplexity(parent context.Context, apiKey string, req importModel.PerplexityRequest, timeout time.Duration, search_id_ai_summary string, search_id_list string, searchRecord *importModel.Search, pool *pgxpool.Pool, platform string, logFn func(object, content string)) {
+
 	// Wait briefly for TCP client registration to avoid missing early chunks
 	//if searchRecord != nil {
 	//id := searchRecord.SearchID.String()
@@ -1123,13 +1263,21 @@ func StartBackgroundPerplexity(parent context.Context, apiKey string, req import
 	//time.Sleep(20 * time.Second)
 	//}
 	go func() {
-		ctx := parent
+		// Add panic recovery for main background processing goroutine
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Printf("Panic recovered in background Perplexity processing: %v\n", r)
+			}
+		}()
+		// Context for Perplexity streaming (long operation)
+		perplexityCtx := parent
 		if timeout > 0 {
-			var cancel context.CancelFunc
-			ctx, cancel = context.WithTimeout(parent, timeout)
-			defer cancel()
+			var perplexityCancel context.CancelFunc
+			perplexityCtx, perplexityCancel = context.WithTimeout(parent, timeout)
+			defer perplexityCancel()
 		}
-		body, _, err := StreamPerplexity(ctx, nil, apiKey, req)
+
+		body, _, err := StreamPerplexity(perplexityCtx, nil, apiKey, req)
 		if err != nil {
 			fmt.Printf("Perplexity error: %v\n", err)
 			//if error is 429 them kindly  send in both links that sockets was closed due to rate limit
@@ -1147,20 +1295,7 @@ func StartBackgroundPerplexity(parent context.Context, apiKey string, req import
 			return
 		}
 		defer body.Close()
-		// fmt.Println("--------------------------------")
-		// fmt.Println("--------------------------------")
-		// fmt.Println("--------------------------------")
-		// fmt.Println("--------------------------------")
-		// fmt.Println("--------------------------------")
-		// fmt.Println("--------------------------------")
-		// fmt.Println("SearchID that has sent to the client:", search_id_ai_summary)
-		// fmt.Println("--------------------------------")
-		// fmt.Println("--------------------------------")
-		// fmt.Println("--------------------------------")
-		// fmt.Println("--------------------------------")
-		// fmt.Println("--------------------------------")
-		// fmt.Println("--------------------------------")
 
-		_ = ForwardStream(ctx, body, io.Discard, logFn, search_id_ai_summary, search_id_list, pool, searchRecord, platform)
+		_ = ForwardStream(perplexityCtx, body, io.Discard, logFn, search_id_ai_summary, search_id_list, pool, searchRecord, platform)
 	}()
 }

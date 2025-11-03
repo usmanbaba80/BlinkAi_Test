@@ -7,7 +7,7 @@
 *.dylib
 
 # Build artifacts
-api
+
 *.out
 *.test
 

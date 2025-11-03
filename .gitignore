@@ -1,6 +1,39 @@
-BlinkAi.sql
-BlinkAI_queries.sql
-tests/
-.env
-ai_content/
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.so.*
+*.dylib
 
+# Build artifacts
+api
+*.out
+*.test
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+vendor/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+output/
+
+*.md

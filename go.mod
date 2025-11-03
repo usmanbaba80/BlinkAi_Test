@@ -1,4 +1,4 @@
-module github.com/InvicttusGIT/BlinkAi_SearchEngineApps_Productivity_Backend
+module github.com/InvicttusGIT/BlinkAi_Merged
 
 go 1.24.5
 
@@ -10,6 +10,7 @@ require (
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/joho/godotenv v1.5.1
 	github.com/labstack/echo/v4 v4.13.4
+	github.com/lib/pq v1.10.9
 )
 
 require (
@@ -34,3 +35,4 @@ require (
 	golang.org/x/text v0.25.0 // indirect
 	golang.org/x/time v0.11.0 // indirect
 )
+

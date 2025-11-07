@@ -13,15 +13,13 @@ FastAPI service for capturing webpage screenshots with PostgreSQL caching and S3
 
 ```
 ├── app/
-│   ├── api/            # API routes
-│   ├── core/           # Config and logging
-│   ├── db/             # Database connection
-│   ├── models/         # Pydantic models
-│   ├── services/       # Business logic
-│   └── main.py         # FastAPI app
+│   ├── core/           # Configuration and logging
+│   ├── db/             # Database connection and operations
+│   ├── main.py         # FastAPI application and routes
+│   └── models/         # Pydantic models and schemas
 ├── run.py              # Application entry point
-├── requirements.txt
-└── README.md
+├── requirements.txt    # Python dependencies
+└── README.md          # This file
 ```
 
 ## Setup

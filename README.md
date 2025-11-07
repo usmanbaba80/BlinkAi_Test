@@ -2,6 +2,13 @@
 
 FastAPI service for capturing webpage screenshots with PostgreSQL caching and S3 storage.
 
+## ⚡ Performance Optimizations
+
+- **50 concurrent requests** support (5 browsers × 10 tabs each)
+- **Non-blocking database caching** with 500ms timeout
+- **Fast database timeouts** (5s connection, 2s queries)
+- **Configurable caching** - can be disabled for max performance
+
 ## Project Structure
 
 ```
@@ -42,6 +49,26 @@ BASE_PATH=https://your-cdn.com
 # Run server
 python run.py
 ```
+
+## ⚡ Performance Tuning
+
+### Database Caching Configuration
+
+Add these optional settings to your `.env` file for performance optimization:
+
+```env
+# Performance tuning (optional)
+DB_ENABLE_CACHING=true          # Set to false to disable all DB operations (max performance)
+DB_CACHE_TIMEOUT=0.5            # Cache check timeout in seconds (default: 0.5)
+DB_STORAGE_TIMEOUT=1.0          # Storage timeout in seconds (default: 1.0)
+```
+
+### Performance Optimizations Applied
+
+- **Non-blocking database operations**: Database cache checks timeout after 500ms
+- **Fast database timeouts**: 5s connection timeout, 2s query timeout
+- **Configurable caching**: Can be disabled entirely for maximum performance
+- **50 concurrent request support**: 5 browsers × 10 tabs configuration
 
 ## API Endpoints
 

@@ -15,12 +15,13 @@ class Settings(BaseSettings):
     db_ssl_ca: Optional[str] = None
     db_server_public_key: Optional[str] = None  # Path to MySQL server public key (PEM)
     
-    # Database pool optimization settings
-    db_connection_timeout: int = 30  # Increased from 10
-    db_pool_reset_session: bool = True
-    db_use_pure_python: bool = True
+    # Database pool optimization settings - OPTIMIZED FOR HIGH CONCURRENCY
+    db_connection_timeout: int = 5  # Reduced from 30 - fast failure for concurrent requests
+    db_pool_reset_session: bool = False  # Disabled for performance
+    db_use_pure_python: bool = False  # Use C extensions for speed
     db_pool_recycle: int = 3600  # Recycle connections every hour
-    db_pool_pre_ping: bool = True  # Validate connections before use
+    db_pool_pre_ping: bool = False  # Disabled for performance - let connections fail fast
+    db_command_timeout: int = 2  # Fast query timeout (2 seconds max per query)
     
     # AWS/S3 settings
     aws_access_key_id: str
@@ -50,6 +51,11 @@ class Settings(BaseSettings):
     screenshot_queue_timeout: int = 300  # Longer timeout for queued requests (5 minutes)
     screenshot_retry_attempts: int = 0  # SINGLE RETRY: Handle transient failures
     screenshot_enable_request_metrics: bool = True  # Enable request metrics tracking
+
+    # Database caching settings - PERFORMANCE OPTIMIZATION
+    db_enable_caching: bool = True  # Enable/disable database caching for performance
+    db_cache_timeout: float = 0.5  # Cache check timeout in seconds (0.5 = 500ms)
+    db_storage_timeout: float = 1.0  # Storage timeout in seconds (1.0 = 1 second)
     
     # HTTP Client Pool Configuration
     http_max_connections: int = 200  # Total HTTP connections in pool

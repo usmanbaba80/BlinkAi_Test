@@ -1624,17 +1624,26 @@ async def get_performance_metrics() -> Dict[str, Any]:
 async def store_slices_in_db(url: str, output_path: str, slices: List[str]):
     """
     Store screenshot slices in database (links functionality removed).
-    
+    ⚡ OPTIMIZED: Non-blocking with short timeout for high concurrency.
+
     Args:
         url: The URL that was screenshotted
         output_path: Path where screenshot was saved
         slices: List of slice file paths
-        
+
     Note:
-        If database is not available, this function will log a warning and return gracefully
+        Uses short timeout to prevent blocking. If database is slow, storage is skipped.
     """
+    # ⚡ PERFORMANCE: Skip database storage if caching disabled
+    if not getattr(settings, 'db_enable_caching', True):
+        return
+
     try:
-        async with get_db_connection() as conn:
+        # ⏰ CONFIGURABLE TIMEOUT: Prevent blocking concurrent requests
+        import asyncio
+        storage_timeout = getattr(settings, 'db_storage_timeout', 1.0)
+        async with asyncio.timeout(storage_timeout):
+            async with get_db_connection() as conn:
             # Check if URL already exists
             check_sql = "SELECT id FROM screenshots WHERE url = %s LIMIT 1"
             existing = await execute_query(conn, check_sql, (url,))
@@ -1651,7 +1660,11 @@ async def store_slices_in_db(url: str, output_path: str, slices: List[str]):
                 logger.info(f"✅ Successfully stored screenshot data in database for URL: {url}")
             
             logger.debug(f"Generated {len(slices)} slices")
-            
+
+    except asyncio.TimeoutError:
+        logger.debug(f"⚡ Database storage timeout (>{storage_timeout}s) for URL: {url} - storage skipped for performance")
+        # Don't raise exception - storage is not critical to main functionality
+
     except Exception as e:
         logger.warning(f"⚠️ Could not store screenshot data in database: {e}")
         # Don't raise exception - this is not critical to the main functionality
@@ -1659,32 +1672,42 @@ async def store_slices_in_db(url: str, output_path: str, slices: List[str]):
 async def check_existing_entry(url: str) -> Optional[Dict[str, Any]]:
     """
     Check if a screenshot already exists for the given URL.
-    
+    ⚡ OPTIMIZED: Non-blocking with short timeout for high concurrency.
+
     Args:
         url: URL to check for existing screenshot
-        
+
     Returns:
         Dictionary with existing screenshot data or None if not found
-        
+
     Note:
-        If database is not available, returns None (no cached entry found)
+        Uses short timeout to prevent blocking concurrent requests.
+        If database is slow/unavailable, returns None (cache miss).
     """
+    # ⚡ PERFORMANCE: Skip database caching if disabled
+    if not getattr(settings, 'db_enable_caching', True):
+        return None
+
     try:
-        async with get_db_connection() as conn:
-            logger.debug(f"🔍 Checking for existing screenshot entry for URL: {url}")
-            
-            sql = "SELECT slices FROM screenshots WHERE url = %s ORDER BY timestamp_column DESC LIMIT 1"
-            result = await execute_query(conn, sql, (url,))
-            
-            if result:
-                # PostgreSQL returns asyncpg.Record objects, access by column name
-                slices_data = result[0]['slices']
-                
-                # Handle JSONB - it might already be parsed or might be a string
-                if isinstance(slices_data, str):
-                    slices_list = json.loads(slices_data)
-                else:
-                    slices_list = slices_data  # Already parsed by asyncpg
+        # ⏰ CONFIGURABLE TIMEOUT: Prevent blocking concurrent requests
+        import asyncio
+        cache_timeout = getattr(settings, 'db_cache_timeout', 0.5)
+        async with asyncio.timeout(cache_timeout):
+            async with get_db_connection() as conn:
+                logger.debug(f"🔍 Checking for existing screenshot entry for URL: {url}")
+
+                sql = "SELECT slices FROM screenshots WHERE url = %s ORDER BY timestamp_column DESC LIMIT 1"
+                result = await execute_query(conn, sql, (url,))
+
+                if result:
+                    # PostgreSQL returns asyncpg.Record objects, access by column name
+                    slices_data = result[0]['slices']
+
+                    # Handle JSONB - it might already be parsed or might be a string
+                    if isinstance(slices_data, str):
+                        slices_list = json.loads(slices_data)
+                    else:
+                        slices_list = slices_data  # Already parsed by asyncpg
                 
                 logger.info(f"✅ Found existing screenshot in cache for URL: {url}")
                 return {
@@ -1694,9 +1717,13 @@ async def check_existing_entry(url: str) -> Optional[Dict[str, Any]]:
                     "slices": slices_list
                 }
                 
-            logger.debug(f"No existing screenshot found for URL: {url}")
-            return None
-                
+                logger.debug(f"No existing screenshot found for URL: {url}")
+                return None
+
+    except asyncio.TimeoutError:
+        logger.debug(f"⚡ Cache check timeout (>{cache_timeout}s) for URL: {url} - proceeding with screenshot creation")
+        return None  # Fast timeout - treat as cache miss
+
     except Exception as e:
         logger.debug(f"Cache check failed (DB not available or error): {e}")
         return None  # Return None instead of raising exception

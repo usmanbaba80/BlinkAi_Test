@@ -38,7 +38,7 @@ async def init_connection_pool():
                 database=settings.db_name,
                 min_size=5,
                 max_size=settings.db_pool_size,
-                command_timeout=settings.db_connection_timeout,
+                command_timeout=getattr(settings, 'db_command_timeout', 30),  # Query timeout
                 # SSL configuration
                 ssl='require' if settings.db_ssl_ca else None
             )

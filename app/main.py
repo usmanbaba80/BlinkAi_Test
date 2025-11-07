@@ -1644,21 +1644,21 @@ async def store_slices_in_db(url: str, output_path: str, slices: List[str]):
         storage_timeout = getattr(settings, 'db_storage_timeout', 1.0)
         async with asyncio.timeout(storage_timeout):
             async with get_db_connection() as conn:
-            # Check if URL already exists
-            check_sql = "SELECT id FROM screenshots WHERE url = %s LIMIT 1"
-            existing = await execute_query(conn, check_sql, (url,))
-            
-            if existing:
-                # Update existing record
-                sql = "UPDATE screenshots SET slices = %s, output_path = %s, timestamp_column = CURRENT_TIMESTAMP WHERE url = %s"
-                await execute_update(conn, sql, (json.dumps(slices), output_path, url))
-                logger.info(f"✅ Updated screenshot data in database for URL: {url}")
-            else:
-                # Insert new record
-                sql = "INSERT INTO screenshots (url, output_path, slices) VALUES (%s, %s, %s)"
-                await execute_update(conn, sql, (url, output_path, json.dumps(slices)))
-                logger.info(f"✅ Successfully stored screenshot data in database for URL: {url}")
-            
+                # Check if URL already exists
+                check_sql = "SELECT id FROM screenshots WHERE url = %s LIMIT 1"
+                existing = await execute_query(conn, check_sql, (url,))
+
+                if existing:
+                    # Update existing record
+                    sql = "UPDATE screenshots SET slices = %s, output_path = %s, timestamp_column = CURRENT_TIMESTAMP WHERE url = %s"
+                    await execute_update(conn, sql, (json.dumps(slices), output_path, url))
+                    logger.info(f"✅ Updated screenshot data in database for URL: {url}")
+                else:
+                    # Insert new record
+                    sql = "INSERT INTO screenshots (url, output_path, slices) VALUES (%s, %s, %s)"
+                    await execute_update(conn, sql, (url, output_path, json.dumps(slices)))
+                    logger.info(f"✅ Successfully stored screenshot data in database for URL: {url}")
+
             logger.debug(f"Generated {len(slices)} slices")
 
     except asyncio.TimeoutError:
